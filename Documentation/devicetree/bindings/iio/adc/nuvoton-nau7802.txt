@@ -1,0 +1,17 @@
+* Nuvoton NAU7802 Analog to Digital Converter (ADC)
+
+Required properties:
+  - compatible: Should be "nuvoton,nau7802"
+  - reg: Should contain the ADC I2C address
+
+Optional properties:
+  - nuvoton,vldo: Reference voltage in millivolts (integer)
+  - interrupts: IRQ line for the ADC. If not used the driver will use
+    polling.
+
+Example:
+adc2: nau7802@2a {
+	compatible = "nuvoton,nau7802";
+	reg = <0x2a>;
+	nuvoton,vldo = <3000>;
+};
