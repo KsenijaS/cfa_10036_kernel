@@ -73,6 +73,11 @@
 #include "host.h"
 #include "debug.h"
 
+/* force full-speed operation */
+static bool full_speed;
+module_param(full_speed, bool, 0444);
+MODULE_PARM_DESC(full_speed, "force full-speed mode");
+
 /* Controller register map */
 static uintptr_t ci_regs_nolpm[] = {
 	[CAP_CAPLENGTH]		= 0x000UL,
@@ -265,6 +270,12 @@ int hw_device_reset(struct ci13xxx *ci, u32 mode)
 	while (hw_read(ci, OP_USBCMD, USBCMD_RST))
 		udelay(10);		/* not RTOS friendly */
 
+	if (full_speed) {
+		if (ci->hw_bank.lpm)
+			hw_write(ci, OP_PORTSC, DEVLC_PFSC, DEVLC_PFSC);
+		else
+			hw_write(ci, OP_PORTSC, PORTSC_PFSC, PORTSC_PFSC);
+	}
 
 	if (ci->platdata->notify_event)
 		ci->platdata->notify_event(ci,
