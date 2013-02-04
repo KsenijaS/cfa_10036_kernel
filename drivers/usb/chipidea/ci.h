@@ -136,6 +136,7 @@ struct hw_bank {
  * @id_event: indicates there is a id event, and handled at ci_otg_work
  * @b_sess_valid_event: indicates there is a vbus event, and handled
  * at ci_otg_work
+ * @reg_vbus: used to control internal vbus regulator
  */
 struct ci13xxx {
 	struct device			*dev;
@@ -176,6 +177,7 @@ struct ci13xxx {
 	struct usb_otg      		otg;
 	bool				id_event;
 	bool				b_sess_valid_event;
+	struct regulator		*reg_vbus;
 };
 
 static inline struct ci_role_driver *ci_role(struct ci13xxx *ci)
