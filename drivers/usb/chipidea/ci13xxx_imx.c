@@ -113,7 +113,8 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 	pdata->capoffset = DEF_CAPOFFSET;
 	pdata->flags = CI13XXX_REQUIRE_TRANSCEIVER |
 		       CI13XXX_PULLUP_ON_VBUS |
-		       CI13XXX_DISABLE_STREAMING;
+		       CI13XXX_DISABLE_STREAMING | 
+		       CI13XXX_REGS_SHARED;
 
 	pdata->phy_mode = of_usb_get_phy_mode(pdev->dev.of_node);
 	pdata->dr_mode = of_usb_get_dr_mode(pdev->dev.of_node);
