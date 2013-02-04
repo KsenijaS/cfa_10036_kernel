@@ -112,7 +112,6 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 	pdata->name = "ci13xxx_imx";
 	pdata->capoffset = DEF_CAPOFFSET;
 	pdata->flags = CI13XXX_REQUIRE_TRANSCEIVER |
-		       CI13XXX_PULLUP_ON_VBUS |
 		       CI13XXX_DISABLE_STREAMING | 
 		       CI13XXX_REGS_SHARED;
 
