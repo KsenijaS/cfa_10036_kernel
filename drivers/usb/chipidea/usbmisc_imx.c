@@ -197,6 +197,14 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 	if (IS_ERR(data->base))
 		return PTR_ERR(data->base);
 
+	tmp_dev = (struct of_device_id *)
+		of_match_device(usbmisc_imx_dt_ids, &pdev->dev);
+	data->ops = (const struct usbmisc_ops *)tmp_dev->data;
+
+	/* on i.MX6, the USBMISC layout is part of the ANATOP syscon region */
+	if (data->ops == &imx6q_usbmisc_ops)
+		goto skip_clocks;
+
 	data->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev,
@@ -211,9 +219,7 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	tmp_dev = (struct of_device_id *)
-		of_match_device(usbmisc_imx_dt_ids, &pdev->dev);
-	data->ops = (const struct usbmisc_ops *)tmp_dev->data;
+ skip_clocks:
 	usbmisc = data;
 	ret = usbmisc_set_ops(data->ops);
 	if (ret) {
