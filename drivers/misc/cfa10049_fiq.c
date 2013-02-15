@@ -10,20 +10,102 @@
 
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
-struct file_operations cfafiq_fops = {
+#include <mach/mxs.h>
+
+#define TIMROT_TIMCTRL_REG(n)		(0x20 + (n) * 0x40)
+#define TIMROT_TIMCTRL_SELECT_32K		(0xb)
+#define TIMROT_TIMCTRL_ALWAYS_TICK		(0xf)
+#define TIMROT_TIMCTRL_RELOAD			(1 << 6)
+#define TIMROT_TIMCTRL_IRQ_EN			(1 << 14)
+#define TIMROT_TIMCTRL_IRQ			(1 << 15)
+#define TIMROT_FIXED_COUNT_REG(n)	(0x40 + (n) * 0x40)
+
+#define PINCTRL_DOUT1_REG		0x0710
+#define PINCTRL_DOE1_REG		0x0b10
+
+#define GPIO	(1 * 32 + 21)
+
+/* struct file_operations cfafiq_fops = { */
+/* }; */
+
+static void __iomem *mxs_timrot_base = MXS_IO_ADDRESS(MXS_TIMROT_BASE_ADDR);
+
+struct cfafiq_data {
+	unsigned int	irq;
 };
+
+static irqreturn_t cfafiq_handler(int irq, void *private)
+{
+
+	printk("Plop\n");
+
+	asm volatile (
+		"mov r0, #0xb10\n\t"
+		"mov r1, #0x710\n\t"
+		/* Enable data lines for this gpio */
+		"mov r2, #1\n\t"
+		"lsl r2, r2, #21\n\t"
+		"str r2, [r0, #4]\n\t"
+		/* Invert the values of the gpio */
+		"str r2, [r1, #0xc]\n\t"
+		::: "memory", "cc", "r0", "r1", "r2");
+
+	/* Acknowledge the interrupt */
+	__mxs_clrl(TIMROT_TIMCTRL_IRQ,
+			mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
+
+	return IRQ_HANDLED;
+}
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
+	struct cfafiq_data *fiqdata;
+	struct device_node *np;
 	int ret;
 
-	ret = register_chrdev(0, "cfafiq", &cfafiq_fops);
-	if (ret)
-		return ret;
+	np = pdev->dev.of_node;
+	if (!np) {
+		dev_err(&pdev->dev, "No device tree data available\n");
+		return -EINVAL;
+	}
+
+	fiqdata = devm_kzalloc(&pdev->dev, sizeof(*fiqdata), GFP_KERNEL);
+	if (!fiqdata)
+		return -ENOMEM;
+
+	fiqdata->irq = irq_of_parse_and_map(np, 0);
+	if (fiqdata->irq < 0) {
+		dev_err(&pdev->dev, "Couldn't register given IRQ\n");
+		return -EINVAL;
+	}
+
+	/* 
+	 * Setup timer 2 for our FIQ (the two first are already used
+	 * for the clocksource events). Since we are targeting an
+	 * imx28, we only use the timrotv2.
+	 */
+	/* __raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN, */
+	__raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
+		mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
+
+	__raw_writel(0xffff,
+			mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
+
+	ret = request_irq(fiqdata->irq,
+			cfafiq_handler,
+			0,
+			pdev->dev.driver->name,
+			fiqdata);
+
+	/* ret = register_chrdev(0, "cfafiq", &cfafiq_fops); */
+	/* if (ret) */
+	/* 	return ret; */
 
 	return 0;
 }
@@ -34,7 +116,7 @@ static int cfafiq_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id cfafiq_of_match[] = {
-	{ .compatible = "crystalfontz,cfa-10049-fiq" },
+	{ .compatible = "crystalfontz,cfa10049-fiq" },
 	{}
 };
 

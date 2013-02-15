@@ -305,4 +305,9 @@
 		brightness-levels = <0 4 8 16 32 64 128 255>;
 		default-brightness-level = <6>;
 	};
+
+	fiq {
+		compatible = "crystalfontz,cfa10049-fiq";
+		interrupts = <50>;
+	};
 };
