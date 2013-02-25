@@ -212,7 +212,7 @@ static int hw_device_init(struct ci13xxx *ci, void __iomem *base)
 
 static void hw_phymode_configure(struct ci13xxx *ci)
 {
-	u32 portsc, lpm;
+	u32 portsc, lpm, sts;
 
 	switch (ci->platdata->phy_mode) {
 	case USBPHY_INTERFACE_MODE_UTMI:
@@ -230,6 +230,7 @@ static void hw_phymode_configure(struct ci13xxx *ci)
 	case USBPHY_INTERFACE_MODE_SERIAL:
 		portsc = PORTSC_PTS(PTS_SERIAL);
 		lpm = DEVLC_PTS(PTS_SERIAL);
+		sts = 1;
 		break;
 	case USBPHY_INTERFACE_MODE_HSIC:
 		portsc = PORTSC_PTS(PTS_HSIC);
@@ -239,10 +240,13 @@ static void hw_phymode_configure(struct ci13xxx *ci)
 		return;
 	}
 
-	if (ci->hw_bank.lpm)
+	if (ci->hw_bank.lpm) {
 		hw_write(ci, OP_DEVLC, DEVLC_PTS(7) | DEVLC_PTW, lpm);
-	else
+		hw_write(ci, OP_DEVLC, DEVLC_STS, sts);
+	} else {
 		hw_write(ci, OP_PORTSC, PORTSC_PTS(7) | PORTSC_PTW, portsc);
+		hw_write(ci, OP_PORTSC, PORTSC_STS, sts);
+	}
 }
 
 /**
