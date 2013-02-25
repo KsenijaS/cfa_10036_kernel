@@ -51,6 +51,7 @@
 /* PTS and PTW for non lpm version only */
 #define PORTSC_PTS(d)         ((((d) & 0x3) << 30) | (((d) & 0x4) ? BIT(25) : 0))
 #define PORTSC_PTW            BIT(28)
+#define PORTSC_STS            BIT(29)
 
 /* DEVLC */
 #define DEVLC_PSPD            (0x03UL << 25)
