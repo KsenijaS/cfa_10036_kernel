@@ -80,12 +80,17 @@ struct ci13xxx_req {
 #ifdef CONFIG_USB_CHIPIDEA_UDC
 
 int ci_hdrc_gadget_init(struct ci13xxx *ci);
+void ci_hdrc_gadget_destroy(struct ci13xxx *ci);
 
 #else
 
 static inline int ci_hdrc_gadget_init(struct ci13xxx *ci)
 {
 	return -ENXIO;
+}
+static inline void ci_hdrc_gadget_destroy(struct ci13xxx *ci)
+{
+
 }
 
 #endif
