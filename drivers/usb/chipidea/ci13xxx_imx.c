@@ -89,7 +89,8 @@ static struct ci13xxx_platform_data ci13xxx_imx_platdata  = {
 	.name			= "ci13xxx_imx",
 	.flags			= CI13XXX_REQUIRE_TRANSCEIVER |
 				  CI13XXX_PULLUP_ON_VBUS |
-				  CI13XXX_DISABLE_STREAMING,
+				  CI13XXX_DISABLE_STREAMING |
+				  CI13XXX_REGS_SHARED,
 	.capoffset		= DEF_CAPOFFSET,
 };
 
