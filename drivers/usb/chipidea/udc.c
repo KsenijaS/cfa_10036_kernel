@@ -587,9 +587,6 @@ static int _gadget_stop_activity(struct usb_gadget *gadget)
 	usb_ep_fifo_flush(&ci->ep0out->ep);
 	usb_ep_fifo_flush(&ci->ep0in->ep);
 
-	if (ci->driver)
-		ci->driver->disconnect(gadget);
-
 	/* make sure to disable all endpoints */
 	gadget_for_each_ep(ep, gadget) {
 		usb_ep_disable(ep);
@@ -619,6 +616,11 @@ __acquires(ci->lock)
 	int retval;
 
 	dbg_event(0xFF, "BUS RST", 0);
+
+	if (ci->gadget.speed != USB_SPEED_UNKNOWN) {
+		if (ci->driver)
+			ci->driver->disconnect(&ci->gadget);
+	}
 
 	spin_unlock(&ci->lock);
 	retval = _gadget_stop_activity(&ci->gadget);
@@ -1381,6 +1383,8 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 			hw_device_state(ci, ci->ep0out->qh.dma);
 			dev_dbg(ci->dev, "Connected to host\n");
 		} else {
+			if (ci->driver)
+				ci->driver->disconnect(&ci->gadget);
 			hw_device_state(ci, 0);
 			if (ci->platdata->notify_event)
 				ci->platdata->notify_event(ci,
@@ -1588,12 +1592,13 @@ static int ci13xxx_stop(struct usb_gadget *gadget,
 		if (ci->platdata->notify_event)
 			ci->platdata->notify_event(ci,
 			CI13XXX_CONTROLLER_STOPPED_EVENT);
-		ci->driver = NULL;
 		spin_unlock_irqrestore(&ci->lock, flags);
 		_gadget_stop_activity(&ci->gadget);
 		spin_lock_irqsave(&ci->lock, flags);
 		pm_runtime_put(&ci->gadget.dev);
 	}
+
+	ci->driver = NULL;
 
 	spin_unlock_irqrestore(&ci->lock, flags);
 
