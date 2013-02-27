@@ -26,10 +26,7 @@
 #define TIMROT_TIMCTRL_IRQ			(1 << 15)
 #define TIMROT_FIXED_COUNT_REG(n)	(0x40 + (n) * 0x40)
 
-#define PINCTRL_DOUT1_REG		0x0710
-#define PINCTRL_DOE1_REG		0x0b10
-
-#define GPIO	(1 * 32 + 21)
+#define GPIO	(3 * 32 + 4)
 
 /* struct file_operations cfafiq_fops = { */
 /* }; */
@@ -46,19 +43,20 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 	printk("Plop\n");
 
 	asm volatile (
-		"mov r0, #0xb10\n\t"
-		"mov r1, #0x710\n\t"
+		"ldr r0, =0xf5018b30\n\t"
+		"ldr r1, =0xf5018730\n\t"
+		"ldr r2, =0xf50680a0\n\t"
 		/* Enable data lines for this gpio */
-		"mov r2, #1\n\t"
-		"lsl r2, r2, #21\n\t"
-		"str r2, [r0, #4]\n\t"
+		"mov r3, #1\n\t"
+		"lsl r3, r3, #4\n\t"
+		"str r3, [r0, #4]\n\t"
 		/* Invert the values of the gpio */
-		"str r2, [r1, #0xc]\n\t"
-		::: "memory", "cc", "r0", "r1", "r2");
-
-	/* Acknowledge the interrupt */
-	__mxs_clrl(TIMROT_TIMCTRL_IRQ,
-			mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
+		"str r3, [r1, #0xc]\n\t"
+		/* Acknowledge the interrupt */
+		"mov r3, #1\n\t"
+		"lsl r3, r3, #15\n\t"
+		"str r3, [r2, #8]\n\t"
+		::: "memory", "cc", "r0", "r1", "r2", "r3");
 
 	return IRQ_HANDLED;
 }
