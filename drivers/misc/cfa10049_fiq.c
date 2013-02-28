@@ -16,32 +16,41 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
+#include <asm/fiq.h>
+
 #include <mach/mxs.h>
+
+#include <linux/delay.h>
 
 #define TIMROT_TIMCTRL_REG(n)		(0x20 + (n) * 0x40)
 #define TIMROT_TIMCTRL_SELECT_32K		(0xb)
 #define TIMROT_TIMCTRL_ALWAYS_TICK		(0xf)
 #define TIMROT_TIMCTRL_RELOAD			(1 << 6)
+#define TIMROT_TIMCTRL_UPDATE			(1 << 7)
 #define TIMROT_TIMCTRL_IRQ_EN			(1 << 14)
 #define TIMROT_TIMCTRL_IRQ			(1 << 15)
 #define TIMROT_FIXED_COUNT_REG(n)	(0x40 + (n) * 0x40)
+
+#define HW_ICOLL_INTERRUPTn_SET(n)	(0x0124 + (n) * 0x10)
 
 #define GPIO	(3 * 32 + 4)
 
 /* struct file_operations cfafiq_fops = { */
 /* }; */
 
+static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
 static void __iomem *mxs_timrot_base = MXS_IO_ADDRESS(MXS_TIMROT_BASE_ADDR);
 
 struct cfafiq_data {
 	unsigned int	irq;
 };
 
-static irqreturn_t cfafiq_handler(int irq, void *private)
-{
+/* static irqreturn_t cfafiq_handler(int irq, void *private) */
+/* { */
 
-	printk("Plop\n");
+/* 	printk("Plop\n"); */
 
+void pwet(void) {
 	asm volatile (
 		"ldr r0, =0xf5018b30\n\t"
 		"ldr r1, =0xf5018730\n\t"
@@ -57,9 +66,17 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		"lsl r3, r3, #15\n\t"
 		"str r3, [r2, #8]\n\t"
 		::: "memory", "cc", "r0", "r1", "r2", "r3");
-
-	return IRQ_HANDLED;
 }
+
+/* 	return IRQ_HANDLED; */
+/* } */
+
+
+static struct fiq_handler cfa10049_fh = {
+	.name	= "cfa10049_fiq"
+};
+
+extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
@@ -83,23 +100,37 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	printk("IRQ: %d\n", fiqdata->irq);
+
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
 	 * for the clocksource events). Since we are targeting an
 	 * imx28, we only use the timrotv2.
 	 */
 	/* __raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN, */
-	__raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
+	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
+	writel(TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
 		mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
 
-	__raw_writel(0xffff,
-			mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
+	writel(0xffff, mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
-	ret = request_irq(fiqdata->irq,
-			cfafiq_handler,
-			0,
-			pdev->dev.driver->name,
-			fiqdata);
+	ret = claim_fiq(&cfa10049_fh);
+	if (ret)
+		return ret;
+
+	set_fiq_handler(&cfa10049_fiq_handler,
+			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler);
+
+	/* Enable the FIQ */
+	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
+
+	enable_fiq(fiqdata->irq);
+
+	/* ret = request_irq(fiqdata->irq, */
+	/* 		cfafiq_handler, */
+	/* 		0, */
+	/* 		pdev->dev.driver->name, */
+	/* 		fiqdata); */
 
 	/* ret = register_chrdev(0, "cfafiq", &cfafiq_fops); */
 	/* if (ret) */
