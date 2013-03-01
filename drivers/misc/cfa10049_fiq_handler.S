@@ -25,18 +25,14 @@
 	.global cfa10049_fiq_handler_end
 
 ENTRY(cfa10049_fiq_handler)
-#if 0
 	ldr	r8, =MXS_PINCTRL_BASE
-#endif
 	ldr	r9, =MXS_TIMROT_BASE
-#if 0
 	/* Enable data lines for this gpio */
 	mov	r10, #1
 	lsl	r10, r10, #4
 	str	r10, [r8, #HW_PINCTRL_DOE3 + BIT_SET]
 	/* Invert the values of the gpio */
 	str	r10, [r8, #HW_PINCTRL_DOUT3 + BIT_TOG]
-#endif
 	/* Acknowledge the interrupt */
 	mov	r10, #1
 	lsl	r10, r10, #15

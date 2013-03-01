@@ -80,6 +80,7 @@ extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
+	void __iomem *base;
 	struct cfafiq_data *fiqdata;
 	struct device_node *np;
 	int ret;
@@ -100,7 +101,12 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	base = ioremap(MXS_TIMROT_BASE_ADDR, SZ_8K);
+	if (!base)
+		return -ENOMEM;
+
 	printk("IRQ: %d\n", fiqdata->irq);
+	printk("Base: 0x%x\n", (u32)base);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
@@ -108,8 +114,8 @@ static int cfafiq_probe(struct platform_device *pdev)
 	 * imx28, we only use the timrotv2.
 	 */
 	/* __raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN, */
-	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
-	writel(TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
+	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
+	/* writel(TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
 		mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
 
 	writel(0xffff, mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
@@ -119,7 +125,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return ret;
 
 	set_fiq_handler(&cfa10049_fiq_handler,
-			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler);
+			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler + 16);
 
 	/* Enable the FIQ */
 	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
