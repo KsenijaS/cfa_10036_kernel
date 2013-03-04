@@ -35,41 +35,48 @@
 
 #define GPIO	(3 * 32 + 4)
 
+#define BIT_SET 0x4
+#define BIT_CLR	0x8
+#define BIT_TOG	0xc
+
+#define HW_PINCTRL_DOE3			0xb30
+#define HW_PINCTRL_DOUT3		0x730
+#define HW_TIMROT_TIMCTRL2		0xa0
+
+
 /* struct file_operations cfafiq_fops = { */
 /* }; */
 
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
 static void __iomem *mxs_timrot_base = MXS_IO_ADDRESS(MXS_TIMROT_BASE_ADDR);
+static void __iomem *mxs_pinctrl_base = MXS_IO_ADDRESS(MXS_PINCTRL_BASE_ADDR);
 
 struct cfafiq_data {
 	unsigned int	irq;
 };
 
-/* static irqreturn_t cfafiq_handler(int irq, void *private) */
-/* { */
+static irqreturn_t cfafiq_handler(int irq, void *private)
+{
 
-/* 	printk("Plop\n"); */
+	printk("Plop\n");
 
-void pwet(void) {
 	asm volatile (
-		"ldr r0, =0xf5018b30\n\t"
-		"ldr r1, =0xf5018730\n\t"
-		"ldr r2, =0xf50680a0\n\t"
+		"ldr r8, =0xf5018000\n\t"
+		"ldr r9, =0xf5068000\n\t"
 		/* Enable data lines for this gpio */
-		"mov r3, #1\n\t"
-		"lsl r3, r3, #4\n\t"
-		"str r3, [r0, #4]\n\t"
+		"mov	r10, #1\n\t"
+		"lsl	r10, r10, #4\n\t"
+		"str	r10, [r8, #0xb34]\n\t"
 		/* Invert the values of the gpio */
-		"str r3, [r1, #0xc]\n\t"
+		"str	r10, [r8, #0x73c]\n\t"
 		/* Acknowledge the interrupt */
-		"mov r3, #1\n\t"
-		"lsl r3, r3, #15\n\t"
-		"str r3, [r2, #8]\n\t"
-		::: "memory", "cc", "r0", "r1", "r2", "r3");
-}
+		"mov	r10, #1\n\t"
+		"lsl	r10, r10, #15\n\t"
+		"str	r10, [r9, #0xa8]\n\t"
+		::: "memory", "cc", "r8", "r9", "r10");
 
-/* 	return IRQ_HANDLED; */
-/* } */
+	return IRQ_HANDLED;
+}
 
 
 static struct fiq_handler cfa10049_fh = {
@@ -80,9 +87,10 @@ extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
-	void __iomem *base;
 	struct cfafiq_data *fiqdata;
 	struct device_node *np;
+	void __iomem *pinctrl_base, *timrot_base, *uart_base;
+	struct pt_regs regs;
 	int ret;
 
 	np = pdev->dev.of_node;
@@ -101,12 +109,24 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	base = ioremap(MXS_TIMROT_BASE_ADDR, SZ_8K);
-	if (!base)
+	timrot_base = ioremap(MXS_TIMROT_BASE_ADDR, SZ_8K);
+	if (!timrot_base)
+		return -ENOMEM;
+
+	pinctrl_base = ioremap(MXS_PINCTRL_BASE_ADDR, SZ_8K);
+	if (!pinctrl_base)
+		return -ENOMEM;
+
+	uart_base = ioremap(0x80074000, SZ_8K);
+	if (!pinctrl_base)
 		return -ENOMEM;
 
 	printk("IRQ: %d\n", fiqdata->irq);
-	printk("Base: 0x%x\n", (u32)base);
+	printk("Timrot Base: 0x%x\n", (u32)timrot_base);
+	printk("Pinctrl base: 0x%x\n", (u32)pinctrl_base);
+	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
+
+	cfafiq_handler(0, NULL);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
@@ -118,14 +138,20 @@ static int cfafiq_probe(struct platform_device *pdev)
 	/* writel(TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
 		mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
 
-	writel(0xffff, mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
+	writel(0x500, mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
 	ret = claim_fiq(&cfa10049_fh);
 	if (ret)
 		return ret;
 
 	set_fiq_handler(&cfa10049_fiq_handler,
-			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler + 16);
+			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler);
+
+	regs.ARM_r8 = (long)timrot_base;
+	regs.ARM_r9 = (long)pinctrl_base;
+	regs.ARM_r10 = (long)uart_base;
+	regs.ARM_fp = 'A';
+	set_fiq_regs(&regs);
 
 	/* Enable the FIQ */
 	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
