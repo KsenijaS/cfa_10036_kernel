@@ -9,9 +9,11 @@
  */
 
 #include <linux/cdev.h>
+#include <linux/clk.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -43,16 +45,13 @@
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 
-
-/* struct file_operations cfafiq_fops = { */
-/* }; */
-
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
-static void __iomem *mxs_timrot_base = MXS_IO_ADDRESS(MXS_TIMROT_BASE_ADDR);
-static void __iomem *mxs_pinctrl_base = MXS_IO_ADDRESS(MXS_PINCTRL_BASE_ADDR);
 
 struct cfafiq_data {
 	unsigned int	irq;
+	void __iomem	*pinctrl_base;
+	struct clk	*timer_clk;
+	void __iomem	*timrot_base;
 };
 
 static irqreturn_t cfafiq_handler(int irq, void *private)
@@ -89,7 +88,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 {
 	struct cfafiq_data *fiqdata;
 	struct device_node *np;
-	void __iomem *pinctrl_base, *timrot_base, *uart_base;
 	struct pt_regs regs;
 	int ret;
 
@@ -109,36 +107,37 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	timrot_base = ioremap(MXS_TIMROT_BASE_ADDR, SZ_8K);
-	if (!timrot_base)
+	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-timrot");
+	fiqdata->timrot_base = of_iomap(np, 0);
+	if (!fiqdata->timrot_base)
 		return -ENOMEM;
 
-	pinctrl_base = ioremap(MXS_PINCTRL_BASE_ADDR, SZ_8K);
-	if (!pinctrl_base)
+	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-pinctrl");
+	fiqdata->pinctrl_base = of_iomap(np, 0);
+	if (!fiqdata->pinctrl_base)
 		return -ENOMEM;
 
-	uart_base = ioremap(0x80074000, SZ_8K);
-	if (!pinctrl_base)
-		return -ENOMEM;
+	fiqdata->timer_clk = clk_get_sys("timrot", NULL);
+	if (IS_ERR(fiqdata->timer_clk))
+		return -EINVAL;
+
+	clk_prepare_enable(fiqdata->timer_clk);
 
 	printk("IRQ: %d\n", fiqdata->irq);
-	printk("Timrot Base: 0x%x\n", (u32)timrot_base);
-	printk("Pinctrl base: 0x%x\n", (u32)pinctrl_base);
+	printk("Timrot Base: 0x%x\n", (u32)fiqdata->timrot_base);
+	printk("Pinctrl base: 0x%x\n", (u32)fiqdata->pinctrl_base);
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
-
-	cfafiq_handler(0, NULL);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
 	 * for the clocksource events). Since we are targeting an
 	 * imx28, we only use the timrotv2.
 	 */
-	/* __raw_writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN, */
-	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN,
-	/* writel(TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
-		mxs_timrot_base + TIMROT_TIMCTRL_REG(2));
+	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
+	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
+		fiqdata->timrot_base + TIMROT_TIMCTRL_REG(2));
 
-	writel(0x500, mxs_timrot_base + TIMROT_FIXED_COUNT_REG(2));
+	writel(0xf4240, fiqdata->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
 	ret = claim_fiq(&cfa10049_fh);
 	if (ret)
@@ -147,10 +146,8 @@ static int cfafiq_probe(struct platform_device *pdev)
 	set_fiq_handler(&cfa10049_fiq_handler,
 			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler);
 
-	regs.ARM_r8 = (long)timrot_base;
-	regs.ARM_r9 = (long)pinctrl_base;
-	regs.ARM_r10 = (long)uart_base;
-	regs.ARM_fp = 'A';
+	regs.ARM_r8 = (long)fiqdata->timrot_base;
+	regs.ARM_r9 = (long)fiqdata->pinctrl_base;
 	set_fiq_regs(&regs);
 
 	/* Enable the FIQ */
