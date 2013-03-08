@@ -21,6 +21,7 @@
 	
 	.text
 	.global cfa10049_fiq_handler_end
+	.global cfa10049_fiq_timer
 
 ENTRY(cfa10049_fiq_handler)
 	/*
@@ -41,4 +42,6 @@ ENTRY(cfa10049_fiq_handler)
 	str	r13, [r9, #HW_PINCTRL_DOUT3 + BIT_TOG]
 	/* return from FIQ */
 	subs	pc, lr, #4
+cfa10049_fiq_timer:
+	.word 0x0
 cfa10049_fiq_handler_end:
