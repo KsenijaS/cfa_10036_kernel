@@ -12,6 +12,7 @@
 #include <linux/clk.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
@@ -19,6 +20,7 @@
 #include <linux/platform_device.h>
 
 #include <asm/fiq.h>
+#include <asm/uaccess.h>
 
 #include <mach/mxs.h>
 
@@ -79,10 +81,63 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 
 
 static struct fiq_handler cfa10049_fh = {
-	.name	= "cfa10049_fiq"
+	.name	= "cfa10049_fiq_handler"
 };
 
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
+static u32 cfa10049_fiq_timer;
+
+static ssize_t cfa10049_fiq_read(struct file *file, char __user *userbuf,
+				size_t count, loff_t *ppos)
+{
+	unsigned long rate = 24000000;
+	u32 rate_us = rate / 1000000;
+	u32 period = cfa10049_fiq_timer / rate_us;
+	char buf[64];
+	ssize_t len;
+
+	len = snprintf(buf, sizeof(buf), "%ul us\n", period);
+
+	return simple_read_from_buffer(userbuf, count, ppos, buf, len);
+}
+
+static ssize_t cfa10049_fiq_write(struct file *file,
+				const char __user *userbuf,
+				size_t count, loff_t *ppos)
+{
+	unsigned long rate = 24000000;
+	u32 period, val;
+	char buf[64];
+	int ret;
+
+	count = min_t(size_t, count, (sizeof(buf)-1));
+	if (copy_from_user(buf, userbuf, count))
+		return -EFAULT;
+
+	buf[count] = 0;
+
+	ret = sscanf(buf, "%ul", &val);
+	if (ret < 1)
+		return -EINVAL;
+
+	if (!val)
+		return -EINVAL;
+
+	cfa10049_fiq_timer = val * (rate / 1000000);
+
+	return count;
+}
+
+static struct file_operations cfa10049_fiq_fops = {
+	.read	= &cfa10049_fiq_read,
+	.write	= &cfa10049_fiq_write,
+};
+
+static struct miscdevice cfa10049_fiq_dev = {
+	.name	= "cfa10049_fiq",
+	.fops	= &cfa10049_fiq_fops,
+	.minor	= MISC_DYNAMIC_MINOR,
+};
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
@@ -152,6 +207,12 @@ static int cfafiq_probe(struct platform_device *pdev)
 
 	/* Enable the FIQ */
 	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
+
+	ret = misc_register(&cfa10049_fiq_dev);
+	if (ret)
+		return ret;
+
+	printk("Plop");
 
 	enable_fiq(fiqdata->irq);
 
