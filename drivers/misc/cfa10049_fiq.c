@@ -10,6 +10,7 @@
 
 #include <linux/cdev.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
@@ -27,7 +28,7 @@
 
 #include <mach/mxs.h>
 
-#include <linux/delay.h>
+#include "cfa10049_fiq.h"
 
 #define TIMROT_TIMCTRL_REG(n)		(0x20 + (n) * 0x40)
 #define TIMROT_TIMCTRL_SELECT_32K		(0xb)
@@ -50,14 +51,11 @@
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 
-#define FIQ_BUFFER_SIZE			(SZ_2M)
-
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
-static unsigned long fiq_base;
+static unsigned long *fiq_base;
 
 struct cfafiq_data {
 	struct cdev	chrdev;
-	unsigned int	irq;
 	void __iomem	*pinctrl_base;
 	struct clk	*timer_clk;
 	void __iomem	*timrot_base;
@@ -65,27 +63,34 @@ struct cfafiq_data {
 
 static irqreturn_t cfafiq_handler(int irq, void *private)
 {
+	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)fiq_base;
+	u32 val;
 
 	printk("Plop\n");
 
-	asm volatile (
-		"ldr r8, =0xf5018000\n\t"
-		"ldr r9, =0xf5068000\n\t"
-		/* Enable data lines for this gpio */
-		"mov	r10, #1\n\t"
-		"lsl	r10, r10, #4\n\t"
-		"str	r10, [r8, #0xb34]\n\t"
-		/* Invert the values of the gpio */
-		"str	r10, [r8, #0x73c]\n\t"
-		/* Acknowledge the interrupt */
-		"mov	r10, #1\n\t"
-		"lsl	r10, r10, #15\n\t"
-		"str	r10, [r9, #0xa8]\n\t"
-		::: "memory", "cc", "r8", "r9", "r10");
+	val = fiq_buf->data[fiq_buf->rd_idx++];
+	if (fiq_buf->rd_idx == fiq_buf->size)
+		fiq_buf->rd_idx = 0;
+
+	printk("Retrieved value %d\n", val);
+
+	/* asm volatile ( */
+	/* 	"ldr r8, =0xf5018000\n\t" */
+	/* 	"ldr r9, =0xf5068000\n\t" */
+	/* 	/\* Enable data lines for this gpio *\/ */
+	/* 	"mov	r10, #1\n\t" */
+	/* 	"lsl	r10, r10, #4\n\t" */
+	/* 	"str	r10, [r8, #0xb34]\n\t" */
+	/* 	/\* Invert the values of the gpio *\/ */
+	/* 	"str	r10, [r8, #0x73c]\n\t" */
+	/* 	/\* Acknowledge the interrupt *\/ */
+	/* 	"mov	r10, #1\n\t" */
+	/* 	"lsl	r10, r10, #15\n\t" */
+	/* 	"str	r10, [r9, #0xa8]\n\t" */
+	/* 	::: "memory", "cc", "r8", "r9", "r10"); */
 
 	return IRQ_HANDLED;
 }
-
 
 static struct fiq_handler cfa10049_fh = {
 	.name	= "cfa10049_fiq_handler"
@@ -94,6 +99,8 @@ static struct fiq_handler cfa10049_fh = {
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 extern u32 cfa10049_fiq_timer;
 static struct cfafiq_data *cfa10049_fiq_data;
+static unsigned int cfa10049_fiq_irq;
+
 
 static ssize_t cfa10049_fiq_read(struct file *file, char __user *userbuf,
 				size_t count, loff_t *ppos)
@@ -140,8 +147,8 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 
-	if ((fiq_base > vma->vm_start) || 
-	    ((fiq_base + FIQ_BUFFER_SIZE) < vma->vm_end))
+	if ((fiq_base > (unsigned long*)vma->vm_start) || 
+	    ((fiq_base + FIQ_BUFFER_SIZE) < (unsigned long*)vma->vm_end))
 		return -EINVAL;
 
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
@@ -158,11 +165,28 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
+static long cfa10049_fiq_ioctl(struct file *file,
+			       unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case FIQ_START:
+		enable_irq(cfa10049_fiq_irq);
+		break;
+	case FIQ_STOP:
+		disable_irq(cfa10049_fiq_irq);
+		break;
+	default:
+		return -ENOTTY;
+	};
+
+	return 0;
+}
 
 static struct file_operations cfa10049_fiq_fops = {
-	.mmap	= &cfa10049_fiq_mmap,
-	.read	= &cfa10049_fiq_read,
-	.write	= &cfa10049_fiq_write,
+	.mmap		= &cfa10049_fiq_mmap,
+	.read		= &cfa10049_fiq_read,
+	.write		= &cfa10049_fiq_write,
+	.unlocked_ioctl	= &cfa10049_fiq_ioctl,
 };
 
 static struct miscdevice cfa10049_fiq_dev = {
@@ -173,6 +197,7 @@ static struct miscdevice cfa10049_fiq_dev = {
 
 static int cfafiq_probe(struct platform_device *pdev)
 {
+	struct fiq_buffer *fiq_buf;
 	struct device_node *np;
 	struct pt_regs regs;
 	int ret;
@@ -187,8 +212,8 @@ static int cfafiq_probe(struct platform_device *pdev)
 	if (!cfa10049_fiq_data)
 		return -ENOMEM;
 
-	cfa10049_fiq_data->irq = irq_of_parse_and_map(np, 0);
-	if (cfa10049_fiq_data->irq < 0) {
+	cfa10049_fiq_irq = irq_of_parse_and_map(np, 0);
+	if (cfa10049_fiq_irq < 0) {
 		dev_err(&pdev->dev, "Couldn't register given IRQ\n");
 		return -EINVAL;
 	}
@@ -209,13 +234,17 @@ static int cfafiq_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(cfa10049_fiq_data->timer_clk);
 
-	printk("Rate: %u\n", clk_get_rate(cfa10049_fiq_data->timer_clk));
+	printk("Rate: %lu\n", clk_get_rate(cfa10049_fiq_data->timer_clk));
 	printk("cfa10049_fiq_data: %p\n", cfa10049_fiq_data);
 
-	printk("IRQ: %d\n", cfa10049_fiq_data->irq);
+	printk("IRQ: %d\n", cfa10049_fiq_irq);
 	printk("Timrot Base: 0x%x\n", (u32)cfa10049_fiq_data->timrot_base);
 	printk("Pinctrl base: 0x%x\n", (u32)cfa10049_fiq_data->pinctrl_base);
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
+
+	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, ilog2(FIQ_BUFFER_SIZE));
+	fiq_buf = (struct fiq_buffer*)fiq_base;
+	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(fiq_buf) + sizeof(fiq_buf->data);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
@@ -225,34 +254,34 @@ static int cfafiq_probe(struct platform_device *pdev)
 	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
 	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
 		cfa10049_fiq_data->timrot_base + TIMROT_TIMCTRL_REG(2));
-	cfa10049_fiq_timer = 0xf4240;
+	cfa10049_fiq_timer = 1000000;
 	writel(cfa10049_fiq_timer, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
-	ret = claim_fiq(&cfa10049_fh);
-	if (ret)
-		return ret;
+	/* ret = claim_fiq(&cfa10049_fh); */
+	/* if (ret) */
+	/* 	return ret; */
 
-	set_fiq_handler(&cfa10049_fiq_handler,
-			&cfa10049_fiq_handler_end - &cfa10049_fiq_handler);
+	/* set_fiq_handler(&cfa10049_fiq_handler, */
+	/* 		&cfa10049_fiq_handler_end - &cfa10049_fiq_handler); */
 
-	regs.ARM_r8 = (long)cfa10049_fiq_data->timrot_base;
-	regs.ARM_r9 = (long)cfa10049_fiq_data->pinctrl_base;
-	set_fiq_regs(&regs);
+	/* regs.ARM_r8 = (long)cfa10049_fiq_data->timrot_base; */
+	/* regs.ARM_r9 = (long)cfa10049_fiq_data->pinctrl_base; */
+	/* set_fiq_regs(&regs); */
 
-	/* Enable the FIQ */
-	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
+	/* /\* Enable the FIQ *\/ */
+	/* writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50)); */
 
 	ret = misc_register(&cfa10049_fiq_dev);
 	if (ret)
 		return ret;
 
-	enable_fiq(cfa10049_fiq_data->irq);
+	/* enable_fiq(cfa10049_fiq_data->irq); */
 
-	/* ret = request_irq(fiqdata->irq, */
-	/* 		cfafiq_handler, */
-	/* 		0, */
-	/* 		pdev->dev.driver->name, */
-	/* 		fiqdata); */
+	ret = request_irq(cfa10049_fiq_irq,
+			  cfafiq_handler,
+			  IRQ_NOAUTOEN,
+			  pdev->dev.driver->name,
+			  cfa10049_fiq_data);
 
 	/* ret = register_chrdev(0, "cfafiq", &cfafiq_fops); */
 	/* if (ret) */
