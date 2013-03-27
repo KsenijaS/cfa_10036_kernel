@@ -13,6 +13,8 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
+#include <linux/mm.h>
+#include <linux/mm_types.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
@@ -20,6 +22,7 @@
 #include <linux/platform_device.h>
 
 #include <asm/fiq.h>
+#include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
 #include <mach/mxs.h>
@@ -47,7 +50,10 @@
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 
+#define FIQ_BUFFER_SIZE			(SZ_2M)
+
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
+static unsigned long fiq_base;
 
 struct cfafiq_data {
 	struct cdev	chrdev;
@@ -108,7 +114,7 @@ static ssize_t cfa10049_fiq_write(struct file *file,
 				size_t count, loff_t *ppos)
 {
 	unsigned long rate = clk_get_rate(cfa10049_fiq_data->timer_clk);
-	u32 period, val;
+	u32 val;
 	char buf[64];
 	int ret;
 
@@ -130,7 +136,31 @@ static ssize_t cfa10049_fiq_write(struct file *file,
 	return count;
 }
 
+static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	size_t size = vma->vm_end - vma->vm_start;
+
+	if ((fiq_base > vma->vm_start) || 
+	    ((fiq_base + FIQ_BUFFER_SIZE) < vma->vm_end))
+		return -EINVAL;
+
+	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+
+	/* Remap-pfn-range will mark the range VM_IO */
+	if (remap_pfn_range(vma,
+			    vma->vm_start,
+			    vma->vm_pgoff,
+			    size,
+			    vma->vm_page_prot)) {
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
+
 static struct file_operations cfa10049_fiq_fops = {
+	.mmap	= &cfa10049_fiq_mmap,
 	.read	= &cfa10049_fiq_read,
 	.write	= &cfa10049_fiq_write,
 };
