@@ -28,25 +28,46 @@ int main(int argc, char *argv[])
 	void *addr;
 	unsigned i;
 	int fd;
+	int ret = 0;
 
 	fd = open(FIQ_PATH, O_RDWR);
 	if (!fd) {
 		printf("Couldn't open fiq file\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	addr = mmap(NULL, FIQ_BUFFER_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (addr == MAP_FAILED) {
 		printf("Couldn't map the file\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_close;
 	}
 
 	fiq_buf = (struct fiq_buffer*)addr;
 
-	for (i = 0;; i++) {
-		usleep(10);
-		fiq_buf->data[fiq_buf->wr_idx++] = ((i % 2) + 1) * 1000000;
-		if (fiq_buf->wr_idx = fiq_buf->size)
+	for (i = 0;i < 256; i++) {
+		fiq_buf->data[fiq_buf->wr_idx++] = i;
+		if (fiq_buf->wr_idx == fiq_buf->size)
 			fiq_buf->wr_idx = 0;
 	}
+
+	ret = ioctl(fd, FIQ_START);
+	if (ret) {
+		printf("Couldn't start the FIQ\n");
+		goto out_munmap;
+	}
+
+	for (;; i++) {
+		fiq_buf->data[fiq_buf->wr_idx++] = i;
+		if (fiq_buf->wr_idx == fiq_buf->size)
+			fiq_buf->wr_idx = 0;
+	}
+
+out_munmap:
+	munmap(NULL, FIQ_BUFFER_SIZE);
+out_close:
+	close(fd);
+out:
+	return ret;
 }
