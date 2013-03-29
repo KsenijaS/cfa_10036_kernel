@@ -68,6 +68,8 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 
 	printk("Plop\n");
 
+	printk("Address of the FIQ: 0x%p\n", fiq_buf);
+
 	val = fiq_buf->data[fiq_buf->rd_idx++];
 	if (fiq_buf->rd_idx == fiq_buf->size)
 		fiq_buf->rd_idx = 0;
@@ -147,11 +149,19 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 
-	if ((fiq_base > (unsigned long*)vma->vm_start) || 
-	    ((fiq_base + FIQ_BUFFER_SIZE) < (unsigned long*)vma->vm_end))
-		return -EINVAL;
+	printk("Louloulou\n");
+
+	printk("vm_start: 0x%lx,\tvm_end: 0x%lx,\tsize: %lu\n", vma->vm_start, vma->vm_end, size);
+
+	/* if ((fiq_base <= (unsigned long*)vma->vm_start) ||  */
+	/*     ((fiq_base + FIQ_BUFFER_SIZE) >= (unsigned long*)vma->vm_end)) */
+	/* 	return -EINVAL; */
+
+	printk("Test\n");
 
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+
+	printk("Pwet\n");
 
 	/* Remap-pfn-range will mark the range VM_IO */
 	if (remap_pfn_range(vma,
@@ -161,6 +171,8 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 			    vma->vm_page_prot)) {
 		return -EAGAIN;
 	}
+
+	printk("Kwain\n");
 
 	return 0;
 }
@@ -242,9 +254,17 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("Pinctrl base: 0x%x\n", (u32)cfa10049_fiq_data->pinctrl_base);
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
 
-	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, ilog2(FIQ_BUFFER_SIZE));
+	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, get_order(FIQ_BUFFER_SIZE));
 	fiq_buf = (struct fiq_buffer*)fiq_base;
-	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(fiq_buf) + sizeof(fiq_buf->data);
+
+	printk("Allocated pages at address 0x%p, with size %dMB\n", fiq_base, FIQ_BUFFER_SIZE >> 20);
+
+	printk("Size of fiq_buf %d\n", sizeof(*fiq_buf));
+	printk("Size of fiq_buf->data %d\n", sizeof(fiq_buf->data));
+
+	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(*fiq_buf) + sizeof(fiq_buf->data);
+
+	printk("Size of the the buffer %lu\n", fiq_buf->size);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
@@ -282,6 +302,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 			  IRQ_NOAUTOEN,
 			  pdev->dev.driver->name,
 			  cfa10049_fiq_data);
+	disable_irq(cfa10049_fiq_irq);
 
 	/* ret = register_chrdev(0, "cfafiq", &cfafiq_fops); */
 	/* if (ret) */
