@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -39,7 +40,7 @@ int main(int argc, char *argv[])
 
 	addr = mmap(NULL, FIQ_BUFFER_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (addr == MAP_FAILED) {
-		printf("Couldn't map the file\n");
+		printf("Couldn't map the file, error %d, %s\n", errno, strerror(errno));
 		ret = -ENOMEM;
 		goto out_close;
 	}
