@@ -53,6 +53,8 @@ int main(int argc, char *argv[])
 			fiq_buf->wr_idx = 0;
 	}
 
+	printf("Plouc\n");
+
 	ret = ioctl(fd, FIQ_START);
 	if (ret) {
 		printf("Couldn't start the FIQ\n");

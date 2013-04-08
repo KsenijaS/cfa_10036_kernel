@@ -148,14 +148,18 @@ static ssize_t cfa10049_fiq_write(struct file *file,
 static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 
 	printk("Louloulou\n");
 
 	printk("vm_start: 0x%lx,\tvm_end: 0x%lx,\tsize: %lu\n", vma->vm_start, vma->vm_end, size);
 
-	/* if ((fiq_base <= (unsigned long*)vma->vm_start) ||  */
-	/*     ((fiq_base + FIQ_BUFFER_SIZE) >= (unsigned long*)vma->vm_end)) */
-	/* 	return -EINVAL; */
+	if (offset + size > FIQ_BUFFER_SIZE)
+		return -EINVAL;
+
+	printk("Ohay\n");
+
+	offset += __pa(fiq_base);
 
 	printk("Test\n");
 
@@ -166,11 +170,15 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 	/* Remap-pfn-range will mark the range VM_IO */
 	if (remap_pfn_range(vma,
 			    vma->vm_start,
-			    vma->vm_pgoff,
+			    offset >> PAGE_SHIFT,
 			    size,
 			    vma->vm_page_prot)) {
 		return -EAGAIN;
 	}
+
+	printk("%s: mmap buffer P(%lx)->V(%lx)\n", __FILE__,
+	       offset, vma->vm_start);
+	
 
 	printk("Kwain\n");
 
@@ -180,6 +188,8 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 static long cfa10049_fiq_ioctl(struct file *file,
 			       unsigned int cmd, unsigned long arg)
 {
+	printk("Calling IOCTL\n");
+
 	switch (cmd) {
 	case FIQ_START:
 		enable_irq(cfa10049_fiq_irq);
@@ -255,6 +265,11 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
 
 	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, get_order(FIQ_BUFFER_SIZE));
+	if (!fiq_base) {
+		printk("Couldn't allocate memory\n");
+		return -ENOMEM;
+	}
+
 	fiq_buf = (struct fiq_buffer*)fiq_base;
 
 	printk("Allocated pages at address 0x%p, with size %dMB\n", fiq_base, FIQ_BUFFER_SIZE >> 20);
