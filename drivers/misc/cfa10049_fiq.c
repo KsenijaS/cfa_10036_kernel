@@ -21,6 +21,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/string.h>
 
 #include <asm/fiq.h>
 #include <asm/pgtable.h>
@@ -64,32 +65,41 @@ struct cfafiq_data {
 static irqreturn_t cfafiq_handler(int irq, void *private)
 {
 	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)fiq_base;
-	u32 val;
+	u32 val, idx;
 
 	printk("Plop\n");
 
 	printk("Address of the FIQ: 0x%p\n", fiq_buf);
 
-	val = fiq_buf->data[fiq_buf->rd_idx++];
-	if (fiq_buf->rd_idx == fiq_buf->size)
-		fiq_buf->rd_idx = 0;
+	idx = fiq_buf->rd_idx;
+
+	printk("FIQ index: %u\n", idx);
+
+	val = fiq_buf->data[idx];
 
 	printk("Retrieved value %d\n", val);
 
-	/* asm volatile ( */
-	/* 	"ldr r8, =0xf5018000\n\t" */
-	/* 	"ldr r9, =0xf5068000\n\t" */
+	fiq_buf->rd_idx++;
+
+	printk("New index: %u\n", fiq_buf->rd_idx);
+
+	if (fiq_buf->rd_idx == fiq_buf->size)
+		fiq_buf->rd_idx = 0;
+
+	asm volatile (
+		"ldr r8, =0xf5018000\n\t"
+		"ldr r9, =0xf5068000\n\t"
 	/* 	/\* Enable data lines for this gpio *\/ */
 	/* 	"mov	r10, #1\n\t" */
 	/* 	"lsl	r10, r10, #4\n\t" */
 	/* 	"str	r10, [r8, #0xb34]\n\t" */
 	/* 	/\* Invert the values of the gpio *\/ */
 	/* 	"str	r10, [r8, #0x73c]\n\t" */
-	/* 	/\* Acknowledge the interrupt *\/ */
-	/* 	"mov	r10, #1\n\t" */
-	/* 	"lsl	r10, r10, #15\n\t" */
-	/* 	"str	r10, [r9, #0xa8]\n\t" */
-	/* 	::: "memory", "cc", "r8", "r9", "r10"); */
+		/* Acknowledge the interrupt */
+		"mov	r10, #1\n\t"
+		"lsl	r10, r10, #15\n\t"
+		"str	r10, [r9, #0xa8]\n\t"
+		::: "memory", "cc", "r8", "r9", "r10");
 
 	return IRQ_HANDLED;
 }
@@ -265,6 +275,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
 
 	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, get_order(FIQ_BUFFER_SIZE));
+	memset(fiq_base, 0, FIQ_BUFFER_SIZE);
 	if (!fiq_base) {
 		printk("Couldn't allocate memory\n");
 		return -ENOMEM;
@@ -275,9 +286,9 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("Allocated pages at address 0x%p, with size %dMB\n", fiq_base, FIQ_BUFFER_SIZE >> 20);
 
 	printk("Size of fiq_buf %d\n", sizeof(*fiq_buf));
-	printk("Size of fiq_buf->data %d\n", sizeof(fiq_buf->data));
 
-	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(*fiq_buf) + sizeof(fiq_buf->data);
+	/* FIXME: Underestimated size by 4 bytes */
+	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(*fiq_buf);
 
 	printk("Size of the the buffer %lu\n", fiq_buf->size);
 
