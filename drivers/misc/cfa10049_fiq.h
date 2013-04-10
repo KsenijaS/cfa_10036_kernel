@@ -16,9 +16,16 @@
 #define FIQ_START		_IO(FIQ_IOC_MAGIC, 0xb0)
 #define FIQ_STOP		_IO(FIQ_IOC_MAGIC, 0xb1)
 
+struct fiq_cell {
+	unsigned long	timer;
+	unsigned long	clear;
+	unsigned long	set;
+};
+
 struct fiq_buffer {
 	unsigned long	rd_idx;
 	unsigned long	wr_idx;
 	unsigned long	size;
-	unsigned long	data[];
+	unsigned long	cell_size;
+	struct fiq_cell	data[];
 };

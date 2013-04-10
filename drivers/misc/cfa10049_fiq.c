@@ -53,19 +53,21 @@
 #define HW_TIMROT_TIMCTRL2		0xa0
 
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
+static void __iomem *timrot_base, *pinctrl_base;
 static unsigned long *fiq_base;
 
 struct cfafiq_data {
 	struct cdev	chrdev;
-	void __iomem	*pinctrl_base;
+	/* void __iomem	*pinctrl_base; */
 	struct clk	*timer_clk;
-	void __iomem	*timrot_base;
+	/* void __iomem	*timrot_base; */
 };
 
 static irqreturn_t cfafiq_handler(int irq, void *private)
 {
 	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)fiq_base;
-	u32 val, idx;
+	struct fiq_cell *cell;
+	u32 idx;
 
 	printk("Plop\n");
 
@@ -75,16 +77,23 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 
 	printk("FIQ index: %u\n", idx);
 
-	val = fiq_buf->data[idx];
+	cell = fiq_buf->data + idx;
 
-	printk("Retrieved value %d\n", val);
+	printk("Retrieved cell %p\n", cell);
+	printk("Cell timer: %lu\n", cell->timer);
+	printk("Cell clear: %lu\n", cell->clear);
+	printk("Cell set: %lu\n", cell->set);
 
 	fiq_buf->rd_idx++;
 
-	printk("New index: %u\n", fiq_buf->rd_idx);
+	printk("New index: %lu\n", fiq_buf->rd_idx);
 
-	if (fiq_buf->rd_idx == fiq_buf->size)
+	if (fiq_buf->rd_idx >= fiq_buf->size)
 		fiq_buf->rd_idx = 0;
+
+	writel(((cell->timer % 2) + 1) * 12000000 , timrot_base + TIMROT_FIXED_COUNT_REG(2));	
+	writel(cell->clear, pinctrl_base + HW_PINCTRL_DOUT3 + BIT_CLR);
+	writel(cell->set, pinctrl_base + HW_PINCTRL_DOUT3 + BIT_SET);
 
 	asm volatile (
 		"ldr r8, =0xf5018000\n\t"
@@ -251,13 +260,13 @@ static int cfafiq_probe(struct platform_device *pdev)
 	}
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-timrot");
-	cfa10049_fiq_data->timrot_base = of_iomap(np, 0);
-	if (!cfa10049_fiq_data->timrot_base)
+	timrot_base = of_iomap(np, 0);
+	if (!timrot_base)
 		return -ENOMEM;
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-pinctrl");
-	cfa10049_fiq_data->pinctrl_base = of_iomap(np, 0);
-	if (!cfa10049_fiq_data->pinctrl_base)
+	pinctrl_base = of_iomap(np, 0);
+	if (!pinctrl_base)
 		return -ENOMEM;
 
 	cfa10049_fiq_data->timer_clk = clk_get_sys("timrot", NULL);
@@ -270,8 +279,8 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("cfa10049_fiq_data: %p\n", cfa10049_fiq_data);
 
 	printk("IRQ: %d\n", cfa10049_fiq_irq);
-	printk("Timrot Base: 0x%x\n", (u32)cfa10049_fiq_data->timrot_base);
-	printk("Pinctrl base: 0x%x\n", (u32)cfa10049_fiq_data->pinctrl_base);
+	printk("Timrot Base: 0x%x\n", (u32)timrot_base);
+	printk("Pinctrl base: 0x%x\n", (u32)pinctrl_base);
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
 
 	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, get_order(FIQ_BUFFER_SIZE));
@@ -297,11 +306,11 @@ static int cfafiq_probe(struct platform_device *pdev)
 	 * for the clocksource events). Since we are targeting an
 	 * imx28, we only use the timrotv2.
 	 */
-	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
+	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
 	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
-		cfa10049_fiq_data->timrot_base + TIMROT_TIMCTRL_REG(2));
+		timrot_base + TIMROT_TIMCTRL_REG(2));
 	cfa10049_fiq_timer = 1000000;
-	writel(cfa10049_fiq_timer, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
+	writel(cfa10049_fiq_timer, timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
 	/* ret = claim_fiq(&cfa10049_fh); */
 	/* if (ret) */

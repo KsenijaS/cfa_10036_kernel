@@ -26,6 +26,7 @@
 int main(int argc, char *argv[])
 {
 	struct fiq_buffer *fiq_buf;
+	struct fiq_cell *cell;
 	void *addr;
 	unsigned i;
 	int fd;
@@ -51,36 +52,34 @@ int main(int argc, char *argv[])
 
 	printf("Buffer address %p\n", fiq_buf);
 
-	for (i = 0;i < 256; i++) {
+	for (i = 0;; i++) {
 		printf("I: %d\n", i);
 		int idx = fiq_buf->wr_idx;
 		printf("index: %d\n", idx);
 		printf("buffer size: %lu\n", fiq_buf->size);
-		fiq_buf->data[idx] = i;
-		printf("Data\n");
+		cell = fiq_buf->data + idx;
+		cell->timer = i;
+		cell->clear = 0;
+		cell->set = 0;
+
+		if (i % 2)
+			cell->clear = 1 << 4;
+		else
+			cell->set = 1 << 4;
+
 		fiq_buf->wr_idx++;
-		if (fiq_buf->wr_idx == fiq_buf->size)
+		if (fiq_buf->wr_idx >= fiq_buf->size)
 			fiq_buf->wr_idx = 0;
-	}
 
-	printf("Plouc\n");
-
-	ret = ioctl(fd, FIQ_START);
-	if (ret) {
-		printf("Couldn't start the FIQ\n");
-		goto out_munmap;
-	}
-
-	for (;; i++) {
-		printf("I: %d\n", i);
-		int idx = fiq_buf->wr_idx;
-		printf("index: %d\n", idx);
-		printf("buffer size: %lu\n", fiq_buf->size);
-		fiq_buf->data[idx] = i;
-		printf("Data\n");
-		fiq_buf->wr_idx++;
-		if (fiq_buf->wr_idx == fiq_buf->size)
-			fiq_buf->wr_idx = 0;
+		/* Once we have filled the buffer enough, we can start
+		   the FIQ */
+		if (i == 256) {
+			ret = ioctl(fd, FIQ_START);
+			if (ret) {
+				printf("Couldn't start the FIQ\n");
+				goto out_munmap;
+			}
+		}
 	}
 
 out_munmap:
