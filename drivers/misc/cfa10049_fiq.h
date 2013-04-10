@@ -26,6 +26,5 @@ struct fiq_buffer {
 	unsigned long	rd_idx;
 	unsigned long	wr_idx;
 	unsigned long	size;
-	unsigned long	cell_size;
 	struct fiq_cell	data[];
 };

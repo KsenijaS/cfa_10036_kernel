@@ -58,7 +58,9 @@ int main(int argc, char *argv[])
 		printf("index: %d\n", idx);
 		printf("buffer size: %lu\n", fiq_buf->size);
 		cell = fiq_buf->data + idx;
-		cell->timer = i;
+
+		/* Put one interrupt every 0.5/1 secs for easier debug */
+		cell->timer = ((i % 2) + 1) * 12000000;
 		cell->clear = 0;
 		cell->set = 0;
 
