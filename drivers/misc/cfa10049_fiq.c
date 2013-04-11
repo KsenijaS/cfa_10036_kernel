@@ -52,6 +52,8 @@
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 
+#define FIQ
+
 struct cfafiq_data {
 	struct cdev	chrdev;
 	unsigned int	irq;
@@ -65,6 +67,7 @@ static unsigned long *fiq_base;
 static struct cfafiq_data *cfa10049_fiq_data;
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
+#ifndef FIQ
 static irqreturn_t cfafiq_handler(int irq, void *private)
 {
 	asm volatile (
@@ -107,6 +110,7 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 #ifdef FIQ
 static struct fiq_handler cfa10049_fh = {
