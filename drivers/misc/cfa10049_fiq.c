@@ -63,36 +63,47 @@ struct cfafiq_data {
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
 static unsigned long *fiq_base;
 static struct cfafiq_data *cfa10049_fiq_data;
-
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
 static irqreturn_t cfafiq_handler(int irq, void *private)
 {
-	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)fiq_base;
-	struct fiq_cell *cell;
-
-	cell = fiq_buf->data + fiq_buf->rd_idx++;
-	if (fiq_buf->rd_idx >= fiq_buf->size)
-		fiq_buf->rd_idx = 0;
-
-	writel(cell->timer, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
-	writel(cell->clear, cfa10049_fiq_data->pinctrl_base + HW_PINCTRL_DOUT3 + BIT_CLR);
-	writel(cell->set, cfa10049_fiq_data->pinctrl_base + HW_PINCTRL_DOUT3 + BIT_SET);
-
 	asm volatile (
-		"ldr r8, =0xf5018000\n\t"
-		"ldr r9, =0xf5068000\n\t"
-	/* 	/\* Enable data lines for this gpio *\/ */
-	/* 	"mov	r10, #1\n\t" */
-	/* 	"lsl	r10, r10, #4\n\t" */
-	/* 	"str	r10, [r8, #0xb34]\n\t" */
-	/* 	/\* Invert the values of the gpio *\/ */
-	/* 	"str	r10, [r8, #0x73c]\n\t" */
+		"ldr	r8, =0xf5068000	\n"
+		"ldr	r9, =0xf5018000	\n"
+		"mov	r10, %[fiqbase]	\n"
 		/* Acknowledge the interrupt */
-		"mov	r10, #1\n\t"
-		"lsl	r10, r10, #15\n\t"
-		"str	r10, [r9, #0xa8]\n\t"
-		::: "memory", "cc", "r8", "r9", "r10");
+		"mov	r11, #1		\n"
+		"lsl	r11, r11, #15	\n"
+		"str	r11, [r8, #0xa8]\n"
+		/* Get the read index */
+		"ldr	r11, [r10]	\n"
+		/* Increment it */
+		"add	r11, r11, #1	\n"
+		/* If we are over the edge of the buffer, return to
+		 * the beginning */
+		"ldr	r12, [r10, #8]	\n"
+		"cmp	r11, r12	\n"
+		"movcs	r11, #0		\n"
+		/* Update the read index in the buffer */
+		"str	r11, [r10]	\n"
+		/* Get the start address of the array */
+		"add	r12, r10, #12	\n"
+		/* cells have 3 * 4 bytes */
+		"add	r11, r11, r11, lsl #1	\n"
+		"lsl	r11, r11, #2		\n"
+		/* Compute the ptr to the cell */
+		"add	r12, r12, r11		\n"
+		/* Store the 1st cell in the timer control register */
+		"ldr	r11, [r12, #0]		\n"
+		"str	r11, [r8, #0xc0]	\n"
+		/* Store the 2nd cell in the PIO clear register */
+		"ldr	r11, [r12, #4]		\n"
+		"str	r11, [r9, #0x738]	\n"
+		/* Store the 3rd cell in the PIO set register */
+		"ldr	r11, [r12, #8]		\n"
+		"str	r11, [r9, #0x734]	\n"
+		:: [fiqbase] "r" (fiq_base)
+		: "memory", "cc", "r8", "r9", "r10", "r11", "r12");
 
 	return IRQ_HANDLED;
 }
@@ -257,7 +268,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
 	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
 		cfa10049_fiq_data->timrot_base + TIMROT_TIMCTRL_REG(2));
-	writel(1000000, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
+	writel(10000000, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
 
 #ifdef FIQ
