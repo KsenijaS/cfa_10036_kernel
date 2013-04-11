@@ -1,0 +1,69 @@
+* Contiguous memory binding
+
+The /chosen/contiguous-memory node provides runtime configuration of
+contiguous memory regions for Linux kernel. One can create such regions
+for special usage by various device drivers. A good example are
+contiguous memory allocations or memory sharing with other operating
+system on the same hardware board. Those special memory regions might
+depend on the board configuration and devices used on the target system.
+
+Parameters for each memory region can be encoded into the device tree
+wit the following convention:
+
+contiguous-memory {
+
+	(name): region@(base-address) {
+		reg = <(baseaddr) (size)>;
+		(linux,default-contiguous-region);
+		device = <&device_0 &device_1 ...>
+	};
+};
+
+name:		an name given to the defined region.
+base-address:	the base address of the defined region.
+size:		the size of the memory region (bytes).
+linux,default-contiguous-region: property indicating that the region
+		is the default region for all contiguous memory
+		allocations, Linux specific (optional)
+device:		array of phandles to the client device nodes, which use
+		the given contiguous region
+
+* Example:
+
+This example defines a memory configuration containing 2 contiguous
+regions for Linux kernel, one default of all device drivers (named
+contig_mem, placed at 0x72000000, 64MiB) and one dedicated to the
+framebuffer device (named display_mem, placed at 0x78000000, 16MiB). The
+display_mem region is then assigned to fb@12300000 device for contiguous
+memory allocation with Linux kernel drivers.
+
+The reason for creating a separate region for framebuffer device is to
+match the framebuffer address of from configuration done by bootloader,
+so once Linux kernel drivers starts, no glitches on the displayed boot
+logo appears.
+
+/ {
+	/* ... */
+
+	chosen {
+		bootargs = /* ... */
+
+		contiguous-memory {
+			contig_mem: region@72000000 {
+				reg = <0x72000000 0x4000000>;
+				linux,default-contiguous-region;
+			};
+
+			display_mem: region@78000000 {
+				reg = <0x78000000 0x1000000>;
+				device = <&fb0>;
+			};
+		};
+	};
+
+	/* ... */
+
+	fb0: fb@12300000 {
+		status = "okay";
+	};
+};
