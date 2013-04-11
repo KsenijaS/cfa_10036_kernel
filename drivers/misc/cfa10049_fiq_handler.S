@@ -15,10 +15,15 @@
 #define BIT_CLR	0x8
 #define BIT_TOG	0xc
 
+#define HW_PINCTRL_DOE0			0xb00
 #define HW_PINCTRL_DOE3			0xb30
+#define HW_PINCTRL_DOUT0		0x700
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 #define HW_TIMROT_FIXED_COUNT2		0xc0
+
+#define HW_PINCTRL_DOE			HW_PINCTRL_DOE0
+#define HW_PINCTRL_DOUT			HW_PINCTRL_DOUT0
 
 /*
  * This definition needs to match the fiq_cell structure layout
@@ -74,11 +79,11 @@ ENTRY(cfa10049_fiq_handler)
 	str	r11, [r8, #HW_TIMROT_FIXED_COUNT2]
 	/* Store the 2nd cell in the PIO clear register */
 	ldr	r11, [r12, #CLR_OFFSET]
-	str	r11, [r9, #HW_PINCTRL_DOUT3 + BIT_CLR]
+	str	r11, [r9, #HW_PINCTRL_DOUT + BIT_CLR]
 	/* Store the 3rd cell in the PIO set register */
 	ldr	r11, [r12, #SET_OFFSET]
-	str	r11, [r9, #HW_PINCTRL_DOE3 + BIT_SET]
-	str	r11, [r9, #HW_PINCTRL_DOUT3 + BIT_SET]
+	str	r11, [r9, #HW_PINCTRL_DOE + BIT_SET]
+	str	r11, [r9, #HW_PINCTRL_DOUT + BIT_SET]
 	/* return from FIQ */
 	subs	pc, lr, #4
 cfa10049_fiq_handler_end:
