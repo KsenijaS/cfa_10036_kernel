@@ -59,15 +59,14 @@ int main(int argc, char *argv[])
 		printf("buffer size: %lu\n", fiq_buf->size);
 		cell = fiq_buf->data + idx;
 
-		/* Put one interrupt every 0.5/1 secs for easier debug */
-		cell->timer = ((i % 2) + 1) * 12000000;
+		cell->timer = 10;
 		cell->clear = 0;
 		cell->set = 0;
 
-		if (i % 2)
-			cell->clear = 1 << 4;
+		if (i & 1)
+			cell->clear = 1 << 22;
 		else
-			cell->set = 1 << 4;
+			cell->set = 1 << 22;
 
 		fiq_buf->wr_idx++;
 		if (fiq_buf->wr_idx >= fiq_buf->size)
@@ -75,7 +74,7 @@ int main(int argc, char *argv[])
 
 		/* Once we have filled the buffer enough, we can start
 		   the FIQ */
-		if (i == 256) {
+		if (i == 1024) {
 			ret = ioctl(fd, FIQ_START);
 			if (ret) {
 				printf("Couldn't start the FIQ\n");
