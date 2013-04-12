@@ -11,6 +11,7 @@
 #include <linux/cdev.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
@@ -56,6 +57,8 @@
 
 struct cfafiq_data {
 	struct cdev	chrdev;
+	dma_addr_t	dma;
+	void __iomem	*fiq_base;
 	unsigned int	irq;
 	void __iomem	*pinctrl_base;
 	struct clk	*timer_clk;
@@ -63,7 +66,6 @@ struct cfafiq_data {
 };
 
 static void __iomem *mxs_icoll_base = MXS_IO_ADDRESS(MXS_ICOLL_BASE_ADDR);
-static unsigned long *fiq_base;
 static struct cfafiq_data *cfa10049_fiq_data;
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
 
@@ -105,7 +107,7 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		/* Store the 3rd cell in the PIO set register */
 		"ldr	r11, [r12, #8]		\n"
 		"str	r11, [r9, #0x734]	\n"
-		:: [fiqbase] "r" (fiq_base)
+		:: [fiqbase] "r" (cfa10049_fiq_data->fiq_base)
 		: "memory", "cc", "r8", "r9", "r10", "r11", "r12");
 
 	return IRQ_HANDLED;
@@ -132,7 +134,7 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 
 	printk("Ohay\n");
 
-	offset += __pa(fiq_base);
+	offset += __pa(cfa10049_fiq_data->fiq_base);
 
 	printk("Test\n");
 
@@ -246,16 +248,19 @@ static int cfafiq_probe(struct platform_device *pdev)
 	printk("Pinctrl base: 0x%x\n", (u32)cfa10049_fiq_data->pinctrl_base);
 	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
 
-	fiq_base = (unsigned long*)__get_free_pages(GFP_KERNEL, get_order(FIQ_BUFFER_SIZE));
-	memset(fiq_base, 0, FIQ_BUFFER_SIZE);
-	if (!fiq_base) {
+	cfa10049_fiq_data->fiq_base = dma_zalloc_coherent(&pdev->dev, FIQ_BUFFER_SIZE,
+							  &cfa10049_fiq_data->dma, GFP_KERNEL);
+	if (!cfa10049_fiq_data->fiq_base) {
 		printk("Couldn't allocate memory\n");
 		return -ENOMEM;
 	}
 
-	fiq_buf = (struct fiq_buffer*)fiq_base;
+	printk("Physical address allocated %x\n", (unsigned long) cfa10049_fiq_data->dma);
+	printk("Physical address (retrieved) allocated %x\n", __pa(cfa10049_fiq_data->fiq_base));
 
-	printk("Allocated pages at address 0x%p, with size %dMB\n", fiq_base, FIQ_BUFFER_SIZE >> 20);
+	fiq_buf = (struct fiq_buffer*)cfa10049_fiq_data->fiq_base;
+
+	printk("Allocated pages at address 0x%p, with size %dMB\n", cfa10049_fiq_data->fiq_base, FIQ_BUFFER_SIZE >> 20);
 
 	printk("Size of fiq_buf %d\n", sizeof(*fiq_buf));
 
@@ -285,7 +290,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 
 	regs.ARM_r8 = (long)cfa10049_fiq_data->timrot_base;
 	regs.ARM_r9 = (long)cfa10049_fiq_data->pinctrl_base;
-	regs.ARM_r10 = (long)fiq_base;
+	regs.ARM_r10 = (long)cfa10049_fiq_data->fiq_base;
 	set_fiq_regs(&regs);
 
 	/* Enable the FIQ */

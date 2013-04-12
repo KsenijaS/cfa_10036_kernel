@@ -10,7 +10,7 @@
 
 #include <linux/ioctl.h>
 
-#define FIQ_BUFFER_SIZE		(2 * 1024 * 1024)
+#define FIQ_BUFFER_SIZE		(12 * 1024 * 1024)
 
 #define FIQ_IOC_MAGIC            'p'
 #define FIQ_START		_IO(FIQ_IOC_MAGIC, 0xb0)
