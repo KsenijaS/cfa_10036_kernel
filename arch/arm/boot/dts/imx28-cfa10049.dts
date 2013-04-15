@@ -19,6 +19,15 @@
 	model = "Crystalfontz CFA-10049 Board";
 	compatible = "crystalfontz,cfa10049", "crystalfontz,cfa10036", "fsl,imx28";
 
+	chosen {
+		contiguous-memory {
+			fiq_mem: region@0 {
+				reg = <0 0xc00000>;
+				device = <&fiq>;
+			};
+		};
+	};
+
 	apb@80000000 {
 		apbh@80000000 {
 			pinctrl@80018000 {
@@ -327,5 +336,10 @@
 		pinctrl-0 = <&w1_gpio_pins>;
 		status = "okay";
 		gpios = <&gpio1 21 0>;
+	};
+
+	fiq: cfa10049_fiq {
+		compatible = "crystalfontz,cfa10049-fiq";
+		interrupts = <50>;
 	};
 };
