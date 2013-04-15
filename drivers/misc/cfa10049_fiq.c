@@ -126,6 +126,7 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)cfa10049_fiq_data->fiq_base;
 
 	if (offset + size > FIQ_BUFFER_SIZE)
 		return -EINVAL;
