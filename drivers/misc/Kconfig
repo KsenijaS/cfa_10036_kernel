@@ -510,6 +510,15 @@ config LATTICE_ECP3_CONFIG
 
 	  If unsure, say N.
 
+config CFAFIQ
+       bool "CFA-10049 stepper drivers FIQ"
+       depends on ARCH_MXS
+       select FIQ
+       help
+         The CFA-10049 board from Crystalfontz uses a FIQ combined
+         with a device file accessible to drive its stepper motors
+         from userspace.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
