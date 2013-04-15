@@ -239,10 +239,9 @@ static int cfafiq_probe(struct platform_device *pdev)
 	}
 
 	fiq_buf = (struct fiq_buffer*)cfa10049_fiq_data->fiq_base;
-	/* FIXME: Underestimated size by 4 bytes */
-	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(*fiq_buf);
-
-	printk("Size of the the buffer %lu\n", fiq_buf->size);
+	fiq_buf->size = (FIQ_BUFFER_SIZE - 4 * sizeof(unsigned long)) / sizeof(struct fiq_cell);
+	printk("Allocated pages at address 0x%p, with size %dMB (%d cells)\n",
+	       cfa10049_fiq_data->fiq_base, FIQ_BUFFER_SIZE >> 20, fiq_buf->size);
 
 	/* 
 	 * Setup timer 2 for our FIQ (the two first are already used
