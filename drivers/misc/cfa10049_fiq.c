@@ -145,6 +145,7 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 
 	fiq_buf->rd_idx = 0;
 	fiq_buf->wr_idx = 0;
+	fiq_buf->status = 0;
 
 	return 0;
 }
@@ -166,6 +167,7 @@ static long cfa10049_fiq_ioctl(struct file *file,
 	case FIQ_RESET:
 		fiq_buf->rd_idx = 0;
 		fiq_buf->wr_idx = 0;
+		fiq_buf->status = 0;
 		writel(TIMER_DEFAULT,
 		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;

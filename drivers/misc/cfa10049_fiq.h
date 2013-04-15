@@ -17,6 +17,9 @@
 #define FIQ_STOP		_IO(FIQ_IOC_MAGIC, 0xb1)
 #define FIQ_RESET		_IO(FIQ_IOC_MAGIC, 0xb2)
 
+#define FIQ_STATUS_RUNNING	(1 << 0)
+#define FIQ_STATUS_ERR_URUN	(1 << 1)
+
 struct fiq_cell {
 	unsigned long	timer;
 	unsigned long	clear;
@@ -27,5 +30,6 @@ struct fiq_buffer {
 	unsigned long	rd_idx;
 	unsigned long	wr_idx;
 	unsigned long	size;
+	unsigned long	status;
 	struct fiq_cell	data[];
 };

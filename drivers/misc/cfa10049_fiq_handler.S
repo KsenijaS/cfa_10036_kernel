@@ -40,7 +40,10 @@
 #define READ_PTR_OFFSET			0
 #define WRITE_PTR_OFFSET		4
 #define SIZE_OFFSET			8
-#define DATA_OFFSET			12
+#define STATUS_OFFSET			12
+#define DATA_OFFSET			16
+
+#define ERR_URUN			2
 
 	.text
 	.global cfa10049_fiq_handler_end
@@ -58,6 +61,20 @@ ENTRY(cfa10049_fiq_handler)
 	str	r11, [r8, #HW_TIMROT_TIMCTRL2 + BIT_CLR]
 	/* Get the read index */
 	ldr	r11, [r10, #READ_PTR_OFFSET]
+
+	/*
+	 * Detect the underuns, and stop the execution if the
+	 * application is too slow. Unprogram the timer and
+	 * return directly from the FIQ
+	 */
+	ldr	r12, [r10, #WRITE_PTR_OFFSET]
+	cmp	r11, r12
+	moveq	r11, #0
+	streq	r11, [r8, #HW_TIMROT_FIXED_COUNT2]
+	moveq	r11, #ERR_URUN
+	streq	r11, [r10, #STATUS_OFFSET]
+	beq	out
+
 	/* Increment it */
 	add	r11, r11, #1
 	/* If we are over the edge of the buffer, return to
@@ -86,6 +103,7 @@ ENTRY(cfa10049_fiq_handler)
 	ldr	r11, [r12, #SET_OFFSET]
 	str	r11, [r9, #HW_PINCTRL_DOE + BIT_SET]
 	str	r11, [r9, #HW_PINCTRL_DOUT + BIT_SET]
+out:
 	/* return from FIQ */
 	subs	pc, lr, #4
 cfa10049_fiq_handler_end:
