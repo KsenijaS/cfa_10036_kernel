@@ -22,8 +22,8 @@
 #define HW_TIMROT_TIMCTRL2		0xa0
 #define HW_TIMROT_FIXED_COUNT2		0xc0
 
-#define HW_PINCTRL_DOE			HW_PINCTRL_DOE3
-#define HW_PINCTRL_DOUT			HW_PINCTRL_DOUT3
+#define HW_PINCTRL_DOE			HW_PINCTRL_DOE0
+#define HW_PINCTRL_DOUT			HW_PINCTRL_DOUT0
 
 /*
  * This definition needs to match the fiq_cell structure layout
