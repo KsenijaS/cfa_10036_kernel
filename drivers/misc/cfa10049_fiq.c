@@ -53,6 +53,8 @@
 #define HW_PINCTRL_DOUT3		0x730
 #define HW_TIMROT_TIMCTRL2		0xa0
 
+#define TIMER_DEFAULT			1000
+
 #define FIQ
 
 struct cfafiq_data {
@@ -141,6 +143,8 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EAGAIN;
 	}
 
+	fiq_buf->rd_idx = 0;
+	fiq_buf->wr_idx = 0;
 
 	return 0;
 }
@@ -148,21 +152,22 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 static long cfa10049_fiq_ioctl(struct file *file,
 			       unsigned int cmd, unsigned long arg)
 {
+	struct fiq_buffer *fiq_buf = (struct fiq_buffer*)cfa10049_fiq_data->fiq_base;
 
 	switch (cmd) {
 	case FIQ_START:
-#ifdef FIQ
-		enable_fiq(cfa10049_fiq_data->irq);
-#else
-		enable_irq(cfa10049_fiq_data->irq);
-#endif
+		writel(TIMER_DEFAULT,
+		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;
 	case FIQ_STOP:
-#ifdef FIQ
-		disable_fiq(cfa10049_fiq_data->irq);
-#else
-		disable_irq(cfa10049_fiq_data->irq);
-#endif
+		writel(0,
+		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
+		break;
+	case FIQ_RESET:
+		fiq_buf->rd_idx = 0;
+		fiq_buf->wr_idx = 0;
+		writel(TIMER_DEFAULT,
+		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;
 	default:
 		return -ENOTTY;
@@ -244,8 +249,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 	 */
 	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
 		cfa10049_fiq_data->timrot_base + TIMROT_TIMCTRL_REG(2));
-	writel(10000000, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
-
 
 #ifdef FIQ
 	ret = claim_fiq(&cfa10049_fh);
@@ -262,13 +265,13 @@ static int cfafiq_probe(struct platform_device *pdev)
 
 	/* Enable the FIQ */
 	writel(1 << 4, mxs_icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
+	enable_fiq(cfa10049_fiq_data->irq);
 #else
 	ret = request_irq(cfa10049_fiq_data->irq,
 			  cfafiq_handler,
-			  IRQ_NOAUTOEN,
+			  0,
 			  pdev->dev.driver->name,
 			  cfa10049_fiq_data);
-	disable_irq(cfa10049_fiq_data->irq);
 #endif
 
 	ret = misc_register(&cfa10049_fiq_dev);

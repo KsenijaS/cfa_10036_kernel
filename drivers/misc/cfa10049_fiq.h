@@ -15,6 +15,7 @@
 #define FIQ_IOC_MAGIC            'p'
 #define FIQ_START		_IO(FIQ_IOC_MAGIC, 0xb0)
 #define FIQ_STOP		_IO(FIQ_IOC_MAGIC, 0xb1)
+#define FIQ_RESET		_IO(FIQ_IOC_MAGIC, 0xb2)
 
 struct fiq_cell {
 	unsigned long	timer;
