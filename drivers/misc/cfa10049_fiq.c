@@ -125,22 +125,12 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 	size_t size = vma->vm_end - vma->vm_start;
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 
-	printk("Louloulou\n");
-
-	printk("vm_start: 0x%lx,\tvm_end: 0x%lx,\tsize: %lu\n", vma->vm_start, vma->vm_end, size);
-
 	if (offset + size > FIQ_BUFFER_SIZE)
 		return -EINVAL;
 
-	printk("Ohay\n");
-
 	offset += __pa(cfa10049_fiq_data->fiq_base);
 
-	printk("Test\n");
-
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-
-	printk("Pwet\n");
 
 	/* Remap-pfn-range will mark the range VM_IO */
 	if (remap_pfn_range(vma,
@@ -151,11 +141,6 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EAGAIN;
 	}
 
-	printk("%s: mmap buffer P(%lx)->V(%lx)\n", __FILE__,
-	       offset, vma->vm_start);
-	
-
-	printk("Kwain\n");
 
 	return 0;
 }
@@ -163,7 +148,6 @@ static int cfa10049_fiq_mmap(struct file *file, struct vm_area_struct *vma)
 static long cfa10049_fiq_ioctl(struct file *file,
 			       unsigned int cmd, unsigned long arg)
 {
-	printk("Calling IOCTL\n");
 
 	switch (cmd) {
 	case FIQ_START:
@@ -240,14 +224,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(cfa10049_fiq_data->timer_clk);
 
-	printk("Rate: %lu\n", clk_get_rate(cfa10049_fiq_data->timer_clk));
-	printk("cfa10049_fiq_data: %p\n", cfa10049_fiq_data);
-
-	printk("IRQ: %d\n", cfa10049_fiq_data->irq);
-	printk("Timrot Base: 0x%x\n", (u32)cfa10049_fiq_data->timrot_base);
-	printk("Pinctrl base: 0x%x\n", (u32)cfa10049_fiq_data->pinctrl_base);
-	printk("Icoll base: 0x%x\n", (u32)mxs_icoll_base);
-
 	cfa10049_fiq_data->fiq_base = dma_zalloc_coherent(&pdev->dev, FIQ_BUFFER_SIZE,
 							  &cfa10049_fiq_data->dma, GFP_KERNEL);
 	if (!cfa10049_fiq_data->fiq_base) {
@@ -255,15 +231,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	printk("Physical address allocated %x\n", (unsigned long) cfa10049_fiq_data->dma);
-	printk("Physical address (retrieved) allocated %x\n", __pa(cfa10049_fiq_data->fiq_base));
-
 	fiq_buf = (struct fiq_buffer*)cfa10049_fiq_data->fiq_base;
-
-	printk("Allocated pages at address 0x%p, with size %dMB\n", cfa10049_fiq_data->fiq_base, FIQ_BUFFER_SIZE >> 20);
-
-	printk("Size of fiq_buf %d\n", sizeof(*fiq_buf));
-
 	/* FIXME: Underestimated size by 4 bytes */
 	fiq_buf->size = FIQ_BUFFER_SIZE - sizeof(*fiq_buf);
 
@@ -275,7 +243,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 	 * imx28, we only use the timrotv2.
 	 */
 	writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_UPDATE | TIMROT_TIMCTRL_ALWAYS_TICK | TIMROT_TIMCTRL_IRQ_EN,
-	/* writel(TIMROT_TIMCTRL_RELOAD | TIMROT_TIMCTRL_SELECT_32K | TIMROT_TIMCTRL_IRQ_EN, */
 		cfa10049_fiq_data->timrot_base + TIMROT_TIMCTRL_REG(2));
 	writel(10000000, cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 
