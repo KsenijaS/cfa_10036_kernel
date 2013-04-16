@@ -511,7 +511,7 @@ config LATTICE_ECP3_CONFIG
 	  If unsure, say N.
 
 config CFAFIQ
-       tristate "CFA-10049 stepper drivers FIQ"
+       bool "CFA-10049 stepper drivers FIQ"
        depends on ARCH_MXS
        select FIQ
        help
