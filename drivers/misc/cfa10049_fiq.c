@@ -78,6 +78,18 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		"ldr	r8, =0xf5068000	\n"
 		"ldr	r9, =0xf5018000	\n"
 		"mov	r10, %[fiqbase]	\n"
+		/*
+		 * Detect the underuns, and stop the execution if the
+		 * application is too slow. Unprogram the timer and
+		 * return directly from the FIQ
+		 */
+		"ldr	r12, [r10, #4]	\n"
+		"cmp	r11, r12	\n"
+		"moveq	r11, #0		\n"
+		"streq	r11, [r8, #0xc0]\n"
+		"moveq	r11, #2		\n"
+		"streq	r11, [r10, #12]	\n"
+		"beq	out		\n"
 		/* Acknowledge the interrupt */
 		"mov	r11, #1		\n"
 		"lsl	r11, r11, #15	\n"
@@ -94,7 +106,7 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		/* Update the read index in the buffer */
 		"str	r11, [r10]	\n"
 		/* Get the start address of the array */
-		"add	r12, r10, #12	\n"
+		"add	r12, r10, #16	\n"
 		/* cells have 3 * 4 bytes */
 		"add	r11, r11, r11, lsl #1	\n"
 		"lsl	r11, r11, #2		\n"
@@ -102,13 +114,17 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		"add	r12, r12, r11		\n"
 		/* Store the 1st cell in the timer control register */
 		"ldr	r11, [r12, #0]		\n"
+		"add	r11, r11, r11, lsl #1	\n"
+		"lsl	r11, r11, #3		\n"
 		"str	r11, [r8, #0xc0]	\n"
 		/* Store the 2nd cell in the PIO clear register */
 		"ldr	r11, [r12, #4]		\n"
 		"str	r11, [r9, #0x738]	\n"
 		/* Store the 3rd cell in the PIO set register */
 		"ldr	r11, [r12, #8]		\n"
+		"str	r11, [r9, #0xb34]	\n"
 		"str	r11, [r9, #0x734]	\n"
+		"out:"
 		:: [fiqbase] "r" (cfa10049_fiq_data->fiq_base)
 		: "memory", "cc", "r8", "r9", "r10", "r11", "r12");
 
