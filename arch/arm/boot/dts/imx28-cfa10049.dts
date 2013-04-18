@@ -129,6 +129,19 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
+<<<<<<< HEAD
+=======
+
+				w1_gpio_pins: w1-gpio@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x1153 /* MX28_PAD_LCD_D21__GPIO_1_21 */
+					>;
+					fsl,drive-strength = <1>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>; /* 0 will enable the keeper */
+				};
+>>>>>>> back on i2c-mxs
 			};
 
 			lcdif@80030000 {
@@ -149,6 +162,75 @@
 			i2c1: i2c@8005a000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&i2c1_pins_a>;
+<<<<<<< HEAD
+=======
+				status = "okay";
+			};
+
+			i2cmux {
+				compatible = "i2c-mux-gpio";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				mux-gpios = <&gpio1 22 0 &gpio1 23 0>;
+				i2c-parent = <&i2c1>;
+
+				i2c@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc0: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						nuvoton,vldo = <3000>;
+					};
+				};
+
+				i2c@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc1: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						nuvoton,vldo = <3000>;
+					};
+				};
+
+				i2c@2 {
+					reg = <2>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc2: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						nuvoton,vldo = <3000>;
+					};
+				};
+
+				i2c@3 {
+					reg = <3>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					pca9555: pca9555@20 {
+						compatible = "nxp,pca9555";
+						interrupt-parent = <&gpio2>;
+						interrupts = <19 0x2>;
+						gpio-controller;
+						#gpio-cells = <2>;
+						interrupt-controller;
+						#interrupt-cells = <2>;
+						reg = <0x20>;
+					};
+				};
+
+			};
+
+			usbphy1: usbphy@8007e000 {
+>>>>>>> back on i2c-mxs
 				status = "okay";
 			};
 
