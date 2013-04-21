@@ -126,6 +126,75 @@ static struct fb_videomode cfa10049_video_modes[] = {
 	},
 };
 
+
+static struct fb_videomode cfa10055_video_modes[] = {
+	{
+		.name		= "Himax HX8357-B",
+		.refresh	= 60,
+		.xres		= 320,
+		.yres		= 480,
+		.pixclock	= 108506, /* picosecond (9.216 MHz) */
+		.left_margin	= 2,
+		.right_margin	= 2,
+		.upper_margin	= 2,
+		.lower_margin	= 2,
+		.hsync_len	= 15,
+		.vsync_len	= 15,
+		.sync		= FB_SYNC_DATA_ENABLE_HIGH_ACT
+	},
+};
+
+static struct fb_videomode cfa10056_video_modes[] = {
+	{
+		.name		= "Himax HX8369-A01",
+		.refresh	= 70,
+		.xres		= 480,
+		.yres		= 800,
+		.pixclock	= 31055, /* picosecond (32.2009 MHz) */
+		.left_margin	= 2,
+		.right_margin	= 2,
+		.upper_margin	= 2,
+		.lower_margin	= 2,
+		.hsync_len	= 5,
+		.vsync_len	= 5,
+		.sync		= FB_SYNC_DATA_ENABLE_HIGH_ACT
+	},
+};
+
+static struct fb_videomode cfa10057_video_modes[] = {
+	{
+		.name		= "Raydium RM68120",
+		.refresh	= 60,
+		.xres		= 480,
+		.yres		= 800,
+		.pixclock	= 33333, /* picosecond (30.00 MHz) */
+		.left_margin	= 12,
+		.right_margin	= 2,
+		.upper_margin	= 5,
+		.lower_margin	= 3,
+		.hsync_len	= 2,
+		.vsync_len	= 2,
+		.sync		= FB_SYNC_DATA_ENABLE_HIGH_ACT
+	},
+};
+
+static struct fb_videomode cfa10058_video_modes[] = {
+	{
+		.name		= "Crystalfontz CFAF480800A-050T",
+		.refresh	= 60,
+		.xres		= 800,
+		.yres		= 480,
+		.pixclock	= 33333, /* picosecond (30.00 MHz) */
+		.left_margin	= 40,
+		.right_margin	= 40,
+		.upper_margin	= 13,
+		.lower_margin	= 29,
+		.hsync_len	= 8,
+		.vsync_len	= 8,
+		.sync		= FB_SYNC_DATA_ENABLE_HIGH_ACT
+	},
+};
+
 static struct mxsfb_platform_data mxsfb_pdata __initdata;
 
 /*
@@ -407,6 +476,50 @@ static void __init cfa10049_init(void)
 	mxsfb_pdata.sync = MXSFB_SYNC_DATA_ENABLE_HIGH_ACT;
 }
 
+static void __init cfa10055_init(void)
+{
+	enable_clk_enet_out();
+	update_fec_mac_prop(OUI_CRYSTALFONTZ);
+
+	mxsfb_pdata.mode_list = cfa10055_video_modes;
+	mxsfb_pdata.mode_count = ARRAY_SIZE(cfa10055_video_modes);
+	mxsfb_pdata.default_bpp = 32;
+	mxsfb_pdata.ld_intf_width = STMLCDIF_18BIT;
+}
+
+static void __init cfa10056_init(void)
+{
+	enable_clk_enet_out();
+	update_fec_mac_prop(OUI_CRYSTALFONTZ);
+
+	mxsfb_pdata.mode_list = cfa10056_video_modes;
+	mxsfb_pdata.mode_count = ARRAY_SIZE(cfa10056_video_modes);
+	mxsfb_pdata.default_bpp = 32;
+	mxsfb_pdata.ld_intf_width = STMLCDIF_24BIT;
+}
+
+static void __init cfa10057_init(void)
+{
+	enable_clk_enet_out();
+	update_fec_mac_prop(OUI_CRYSTALFONTZ);
+
+	mxsfb_pdata.mode_list = cfa10057_video_modes;
+	mxsfb_pdata.mode_count = ARRAY_SIZE(cfa10057_video_modes);
+	mxsfb_pdata.default_bpp = 32;
+	mxsfb_pdata.ld_intf_width = STMLCDIF_18BIT;
+}
+
+static void __init cfa10058_init(void)
+{
+	enable_clk_enet_out();
+	update_fec_mac_prop(OUI_CRYSTALFONTZ);
+
+	mxsfb_pdata.mode_list = cfa10058_video_modes;
+	mxsfb_pdata.mode_count = ARRAY_SIZE(cfa10058_video_modes);
+	mxsfb_pdata.default_bpp = 32;
+	mxsfb_pdata.ld_intf_width = STMLCDIF_24BIT;
+}
+
 static void __init cfa10037_init(void)
 {
 	enable_clk_enet_out();
@@ -439,6 +552,14 @@ static void __init mxs_machine_init(void)
 		cfa10037_init();
 	else if (of_machine_is_compatible("crystalfontz,cfa10049"))
 		cfa10049_init();
+	else if (of_machine_is_compatible("crystalfontz,cfa10055"))
+		cfa10055_init();
+	else if (of_machine_is_compatible("crystalfontz,cfa10056"))
+		cfa10056_init();
+	else if (of_machine_is_compatible("crystalfontz,cfa10057"))
+		cfa10057_init();
+	else if (of_machine_is_compatible("crystalfontz,cfa10058"))
+		cfa10058_init();
 	else if (of_machine_is_compatible("armadeus,imx28-apf28"))
 		apf28_init();
 	else if (of_machine_is_compatible("schulercontrol,imx28-sps1"))

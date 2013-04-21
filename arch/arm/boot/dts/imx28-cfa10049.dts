@@ -39,10 +39,11 @@
 					reg = <0>;
 					fsl,pinmux-ids = <
 						0x0073 /* MX28_PAD_GPMI_D7__GPIO_0_7 */
+						0x1153 /* MX28_PAD_LCD_D22__GPIO_1_21 */
 						0x1163 /* MX28_PAD_LCD_D22__GPIO_1_22 */
 						0x1173 /* MX28_PAD_LCD_D22__GPIO_1_23 */
 						0x2153 /* MX28_PAD_SSP2_D5__GPIO_2_21 */
-						0x3173 /* MX28_PAD_LCD_RESET__GPIO_3_23 */
+						0x3053 /* MX28_PAD_AUART1_TX__GPIO_3_5 */
 					>;
 					fsl,drive-strength = <0>;
 					fsl,voltage = <1>;
@@ -128,27 +129,6 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
-
-				w1_gpio_pins: w1-gpio@0 {
-					reg = <0>;
-					fsl,pinmux-ids = <
-						0x1153 /* MX28_PAD_LCD_D21__GPIO_1_21 */
-					>;
-					fsl,drive-strength = <1>;
-					fsl,voltage = <1>;
-					fsl,pull-up = <0>; /* 0 will enable the keeper */
-				};
-
-				i2c1_pins_cfa10049: i2c1@0 {
-					reg = <0>;
-					fsl,pinmux-ids = <
-						0x3103 /* MX28_PAD_PWM0__GPIO */
-						0x3113 /* MX28_PAD_PWM1__I2C1_SDA */
-					>;
-					fsl,drive-strength = <1>;
-					fsl,voltage = <1>;
-					fsl,pull-up = <1>;
-				};
 			};
 
 			lcdif@80030000 {
@@ -166,13 +146,78 @@
 				status = "okay";
 			};
 
-			usbphy1: usbphy@8007e000 {
+			i2c1: i2c@8005a000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&i2c1_pins_a>;
 				status = "okay";
 			};
 
-			lradc@80050000 {
+			i2cmux {
+				compatible = "i2c-mux-gpio";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				mux-gpios = <&gpio1 22 0 &gpio1 23 0>;
+				i2c-parent = <&i2c1>;
+
+				i2c@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc0: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						interrupt-parent = <&pca9555>;
+						interrupts = <8 0x2>;
+					};
+				};
+
+				i2c@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc1: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						interrupt-parent = <&pca9555>;
+						interrupts = <9 0x2>;
+					};
+				};
+
+				i2c@2 {
+					reg = <2>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					adc2: nau7802@2a {
+						compatible = "nuvoton,nau7802";
+						reg = <0x2a>;
+						interrupt-parent = <&pca9555>;
+						interrupts = <10 0x2>;
+					};
+				};
+
+				i2c@3 {
+					reg = <3>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					pca9555: pca9555@20 {
+						compatible = "nxp,pca9555";
+						interrupt-parent = <&gpio2>;
+						interrupts = <19 0x2>;
+						gpio-controller;
+						#gpio-cells = <2>;
+						interrupt-controller;
+						#interrupt-cells = <2>;
+						reg = <0x20>;
+					};
+				};
+			};
+
+			usbphy1: usbphy@8007e000 {
 				status = "okay";
-				fsl,lradc-touchscreen-wires = <4>;
 			};
 		};
 	};
@@ -217,7 +262,7 @@
 		gpio-sck = <&gpio2 16 0>;
 		gpio-mosi = <&gpio2 17 0>;
 		gpio-miso = <&gpio2 18 0>;
-		cs-gpios = <&gpio3 23 0>;
+		cs-gpios = <&gpio3 5 0>;
 		num-chipselects = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -290,92 +335,11 @@
 		rotary-encoder,relative-axis;
 	};
 
-	i2c1gpio: i2c@0 {
-		compatible = "i2c-gpio";
-		pinctrl-0 = <&i2c1_pins_cfa10049>;
-		pinctrl-names = "default";
-		gpios = <
-			&gpio3 17 0 /* sda */
-			&gpio3 16 0 /* scl */
-			 >;
-		i2c-gpio,delay-us = <2>;	/* ~100 kHz */
-	};
-
-	i2cmux {
-		compatible = "i2c-mux-gpio";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		mux-gpios = <&gpio1 22 0 &gpio1 23 0>;
-		i2c-parent = <&i2c1gpio>;
-
-		i2c@0 {
-			reg = <0>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			adc0: nau7802@2a {
-				compatible = "nuvoton,nau7802";
-				reg = <0x2a>;
-				nuvoton,vldo = <3000>;
-			};
-		};
-
-		i2c@1 {
-			reg = <1>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			adc1: nau7802@2a {
-				compatible = "nuvoton,nau7802";
-				reg = <0x2a>;
-				nuvoton,vldo = <3000>;
-			};
-		};
-
-		i2c@2 {
-			reg = <2>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			adc2: nau7802@2a {
-				compatible = "nuvoton,nau7802";
-				reg = <0x2a>;
-				nuvoton,vldo = <3000>;
-			};
-		};
-
-		i2c@3 {
-			reg = <3>;
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			pca9555: pca9555@20 {
-				compatible = "nxp,pca9555";
-				interrupt-parent = <&gpio2>;
-				interrupts = <19 0x2>;
-				gpio-controller;
-				#gpio-cells = <2>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
-				reg = <0x20>;
-			};
-		};
-	};
-
 	backlight {
 		compatible = "pwm-backlight";
 		pwms = <&pwm 3 5000000>;
 		brightness-levels = <0 4 8 16 32 64 128 255>;
 		default-brightness-level = <6>;
-
-	};
-
-	onewire@0 {
-		compatible = "w1-gpio";
-		pinctrl-names = "default";
-		pinctrl-0 = <&w1_gpio_pins>;
-		status = "okay";
-		gpios = <&gpio1 21 0>;
 	};
 
 	fiq: cfa10049_fiq {

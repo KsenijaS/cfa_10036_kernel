@@ -141,6 +141,13 @@ config LCD_HX8357
 	  If you have a HX-8357 LCD panel, say Y to enable its LCD control
 	  driver.
 
+config LCD_HX8369
+	tristate "Himax HX-8369 LCD Driver"
+	depends on SPI
+	help
+	  If you have a HX-8369 LCD panel, say Y to enable its LCD control
+	  driver.
+
 endif # LCD_CLASS_DEVICE
 
 #
