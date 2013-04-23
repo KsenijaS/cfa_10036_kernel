@@ -19,6 +19,7 @@
 #include <linux/mm_types.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
+#include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -66,6 +67,8 @@ struct cfafiq_data {
 	void __iomem	*pinctrl_base;
 	struct clk	*timer_clk;
 	void __iomem	*timrot_base;
+	unsigned int	num_gpios;
+	unsigned int	*gpios;
 };
 
 static struct cfafiq_data *cfa10049_fiq_data;
@@ -122,7 +125,6 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		"str	r11, [r9, #0x738]	\n"
 		/* Store the 3rd cell in the PIO set register */
 		"ldr	r11, [r12, #8]		\n"
-		"str	r11, [r9, #0xb34]	\n"
 		"str	r11, [r9, #0x734]	\n"
 		"out:"
 		:: [fiqbase] "r" (cfa10049_fiq_data->fiq_base)
@@ -210,7 +212,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 {
 	struct fiq_buffer *fiq_buf;
 	struct device_node *np;
-	int ret;
+	int ret, i;
 
 #ifdef FIQ
 	struct pt_regs regs;
@@ -254,6 +256,46 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	clk_prepare_enable(cfa10049_fiq_data->timer_clk);
+
+	cfa10049_fiq_data->num_gpios = of_gpio_named_count(np,
+							   "crystalfontz,fiq-gpios");
+	if (!cfa10049_fiq_data->num_gpios) {
+		dev_err(&pdev->dev, "No gpio given\n");
+		return -EINVAL;
+	}
+
+	cfa10049_fiq_data->gpios = devm_kzalloc(&pdev->dev,
+						sizeof(unsigned int) * cfa10049_fiq_data->num_gpios,
+						GFP_KERNEL);
+	if (!cfa10049_fiq_data->gpios)
+		return -ENOMEM;
+
+	for (i = 0; i < cfa10049_fiq_data->num_gpios; i++) {
+		cfa10049_fiq_data->gpios[i] = of_get_named_gpio(np,
+								"crystalfontz,fiq-gpios",
+								i);
+
+		if (cfa10049_fiq_data->gpios[i] == -EPROBE_DEFER) {
+			dev_info(&pdev->dev, "GPIO requested is not here yet, deferring the probe\n");
+			return -EPROBE_DEFER;
+		}
+
+		if (!gpio_is_valid(cfa10049_fiq_data->gpios[i])) {
+			dev_err(&pdev->dev, "Invalid GPIO given\n");
+			return -EINVAL;
+		}
+
+		ret = devm_gpio_request_one(&pdev->dev,
+					    cfa10049_fiq_data->gpios[i],
+					    GPIOF_OUT_INIT_LOW, "fiq-pins");
+		if (ret) {
+			dev_err(&pdev->dev,
+				"failed to request gpio %d: %d\n",
+				cfa10049_fiq_data->gpios[i],
+				ret);
+			return -EINVAL;
+		}
+	}
 
 	cfa10049_fiq_data->fiq_base = dma_zalloc_coherent(&pdev->dev,
 							  FIQ_BUFFER_SIZE,

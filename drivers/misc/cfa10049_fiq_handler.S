@@ -101,7 +101,6 @@ ENTRY(cfa10049_fiq_handler)
 	str	r11, [r9, #HW_PINCTRL_DOUT + BIT_CLR]
 	/* Store the 3rd cell in the PIO set register */
 	ldr	r11, [r12, #SET_OFFSET]
-	str	r11, [r9, #HW_PINCTRL_DOE + BIT_SET]
 	str	r11, [r9, #HW_PINCTRL_DOUT + BIT_SET]
 out:
 	/* return from FIQ */
