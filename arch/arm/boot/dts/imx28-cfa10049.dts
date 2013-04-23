@@ -22,7 +22,7 @@
 	chosen {
 		contiguous-memory {
 			fiq_mem: region@0 {
-				reg = <0 0xc00000>;
+				reg = <0 0xc00000>; /* this will need changed if the size is changed */
 				device = <&fiq>;
 			};
 		};
@@ -39,7 +39,6 @@
 					reg = <0>;
 					fsl,pinmux-ids = <
 						0x0073 /* MX28_PAD_GPMI_D7__GPIO_0_7 */
-						0x1153 /* MX28_PAD_LCD_D22__GPIO_1_21 */
 						0x1163 /* MX28_PAD_LCD_D22__GPIO_1_22 */
 						0x1173 /* MX28_PAD_LCD_D22__GPIO_1_23 */
 						0x2153 /* MX28_PAD_SSP2_D5__GPIO_2_21 */
@@ -149,6 +148,25 @@
 					fsl,drive-strength = <1>;
 					fsl,voltage = <1>;
 					fsl,pull-up = <1>;
+				};
+
+				fiq_pins_cfa10049: fiq@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x0003 /* MX28_PAD_GPMI_D00__GPIO_0_0 */
+						0x0013 /* MX28_PAD_GPMI_D01__GPIO_0_1 */
+						0x0023 /* MX28_PAD_GPMI_D02__GPIO_0_2 */
+						0x0033 /* MX28_PAD_GPMI_D03__GPIO_0_3 */
+						0x0043 /* MX28_PAD_GPMI_D04__GPIO_0_4 */
+						0x0053 /* MX28_PAD_GPMI_D05__GPIO_0_5 */
+						0x0063 /* MX28_PAD_GPMI_D06__GPIO_0_6 */
+						0x0103 /* MX28_PAD_GPMI_CE1N__GPIO_0_16 */
+						0x0153 /* MX28_PAD_GPMI_RDY1__GPIO_0_21 */
+						0x0193 /* MX28_PAD_GPMI_WRN__GPIO_0_25 */
+					>;
+					fsl,drive-strength = <1>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
 				};
 			};
 
@@ -381,6 +399,20 @@
 
 	fiq: cfa10049_fiq {
 		compatible = "crystalfontz,cfa10049-fiq";
+		pinctrl-names = "default";
+		pinctrl-0 = <&fiq_pins_cfa10049>;
 		interrupts = <50>;
+		crystalfontz,fiq-gpios = <
+					&gpio0 0 0  /* STEP_X */
+					&gpio0 1 0  /* DIR_X */
+					&gpio0 2 0  /* STEP_Y */
+					&gpio0 3 0  /* DIR_Y */
+					&gpio0 4 0  /* STEP_Z */
+					&gpio0 5 0  /* DIR_Z */
+					&gpio0 6 0  /* STEP_A */
+					&gpio0 16 0 /* DIR_A */
+					&gpio0 21 0 /* STEP_B */
+					&gpio0 25 0 /* DIR_B */
+					>;
 	};
 };
