@@ -186,6 +186,10 @@
 				status = "okay";
 			};
 
+			usbphy1: usbphy@8007e000 {
+				status = "okay";
+			};
+
 			i2c1: i2c@8005a000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&i2c1_pins_a>;
@@ -254,10 +258,6 @@
 						reg = <0x20>;
 					};
 				};
-			};
-
-			usbphy1: usbphy@8007e000 {
-				status = "okay";
 			};
 		};
 	};
