@@ -160,7 +160,7 @@
 						0x0043 /* MX28_PAD_GPMI_D04__GPIO_0_4 */
 						0x0053 /* MX28_PAD_GPMI_D05__GPIO_0_5 */
 						0x0063 /* MX28_PAD_GPMI_D06__GPIO_0_6 */
-						0x0113 /* MX28_PAD_GPMI_CE1N__GPIO_0_17 */
+						0x0103 /* MX28_PAD_GPMI_CE1N__GPIO_0_16 */
 						0x0153 /* MX28_PAD_GPMI_RDY1__GPIO_0_21 */
 						0x0193 /* MX28_PAD_GPMI_WRN__GPIO_0_25 */
 					>;
@@ -410,7 +410,7 @@
 					&gpio0 4 0  /* STEP_Z */
 					&gpio0 5 0  /* DIR_Z */
 					&gpio0 6 0  /* STEP_A */
-					&gpio0 17 0 /* DIR_A */
+					&gpio0 16 0 /* DIR_A */
 					&gpio0 21 0 /* STEP_B */
 					&gpio0 25 0 /* DIR_B */
 					>;
