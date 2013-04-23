@@ -398,6 +398,14 @@
 		gpios = <&gpio1 21 0>;
 	};
 
+	onewire@0 {
+		compatible = "w1-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&w1_gpio_pins>;
+		status = "okay";
+		gpios = <&gpio1 21 0>;
+	};
+
 	fiq: cfa10049_fiq {
 		compatible = "crystalfontz,cfa10049-fiq";
 		pinctrl-names = "default";
