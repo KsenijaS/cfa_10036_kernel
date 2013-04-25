@@ -1410,9 +1410,6 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_on)
 {
 	struct ci13xxx *ci = container_of(_gadget, struct ci13xxx, gadget);
 
-	if (!ci->vbus_active)
-		return -EPERM;
-
 	if (is_on)
 		hw_device_state(ci, ci->ep0out->qh.dma);
 	else
