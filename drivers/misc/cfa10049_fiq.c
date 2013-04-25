@@ -176,17 +176,19 @@ static long cfa10049_fiq_ioctl(struct file *file,
 
 	switch (cmd) {
 	case FIQ_START:
+		fiq_buf->status = FIQ_STATUS_RUNNING;
 		writel(TIMER_DEFAULT,
 		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;
 	case FIQ_STOP:
+		fiq_buf->status = FIQ_STATUS_STOPPED;
 		writel(0,
 		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;
 	case FIQ_RESET:
 		fiq_buf->rd_idx = 0;
 		fiq_buf->wr_idx = 0;
-		fiq_buf->status = 0;
+		fiq_buf->status = FIQ_STATUS_STOPPED;
 		writel(TIMER_DEFAULT,
 		       cfa10049_fiq_data->timrot_base + TIMROT_FIXED_COUNT_REG(2));
 		break;
