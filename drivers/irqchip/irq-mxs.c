@@ -16,6 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/irq.h>
@@ -36,12 +37,22 @@
 #define HW_ICOLL_INTERRUPTn_SET(n)		(0x0124 + (n) * 0x10)
 #define HW_ICOLL_INTERRUPTn_CLR(n)		(0x0128 + (n) * 0x10)
 #define BM_ICOLL_INTERRUPTn_ENABLE		0x00000004
+#define BM_ICOLL_INTERRUPTn_FIQ_ENABLE		0x00000010
 #define BV_ICOLL_LEVELACK_IRQLEVELACK__LEVEL0	0x1
 
 #define ICOLL_NUM_IRQS		128
 
 static void __iomem *icoll_base;
 static struct irq_domain *icoll_domain;
+
+void mxs_icoll_set_irq_fiq(unsigned int irq)
+{
+	struct irq_data *d = irq_get_irq_data(irq);
+
+	__raw_writel(BM_ICOLL_INTERRUPTn_FIQ_ENABLE,
+		     icoll_base + HW_ICOLL_INTERRUPTn_SET(d->hwirq));
+}
+EXPORT_SYMBOL(mxs_icoll_set_irq_fiq);
 
 static void icoll_ack_irq(struct irq_data *d)
 {
