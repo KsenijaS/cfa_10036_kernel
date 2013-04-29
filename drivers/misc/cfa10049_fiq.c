@@ -42,8 +42,6 @@
 #define TIMROT_TIMCTRL_IRQ			(1 << 15)
 #define TIMROT_FIXED_COUNT_REG(n)	(0x40 + (n) * 0x40)
 
-#define HW_ICOLL_INTERRUPTn_SET(n)	(0x0124 + (n) * 0x10)
-
 #define GPIO	(3 * 32 + 4)
 
 #define BIT_SET 0x4
@@ -62,7 +60,6 @@ struct cfafiq_data {
 	struct cdev	chrdev;
 	dma_addr_t	dma;
 	void __iomem	*fiq_base;
-	void __iomem	*icoll_base;
 	unsigned int	irq;
 	void __iomem	*pinctrl_base;
 	struct clk	*timer_clk;
@@ -73,6 +70,7 @@ struct cfafiq_data {
 
 static struct cfafiq_data *cfa10049_fiq_data;
 extern unsigned char cfa10049_fiq_handler, cfa10049_fiq_handler_end;
+extern void mxs_icoll_set_irq_fiq(unsigned int irq);
 
 #ifndef FIQ
 static irqreturn_t cfafiq_handler(int irq, void *private)
@@ -280,11 +278,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 		}
 	}
 
-	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-icoll");
-	cfa10049_fiq_data->icoll_base = of_iomap(np, 0);
-	if (!cfa10049_fiq_data->icoll_base)
-		return -ENOMEM;
-
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-timrot");
 	cfa10049_fiq_data->timrot_base = of_iomap(np, 0);
 	if (!cfa10049_fiq_data->timrot_base)
@@ -341,8 +334,7 @@ static int cfafiq_probe(struct platform_device *pdev)
 	set_fiq_regs(&regs);
 
 	/* Enable the FIQ */
-	writel(1 << 4,
-	       cfa10049_fiq_data->icoll_base + HW_ICOLL_INTERRUPTn_SET(50));
+	mxs_icoll_set_irq_fiq(cfa10049_fiq_data->irq);
 	enable_fiq(cfa10049_fiq_data->irq);
 #else
 	ret = request_irq(cfa10049_fiq_data->irq,
