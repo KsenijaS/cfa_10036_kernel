@@ -67,8 +67,8 @@ struct cfafiq_data {
 	void __iomem	*pinctrl_base;
 	struct clk	*timer_clk;
 	void __iomem	*timrot_base;
-	unsigned int	num_gpios;
-	unsigned int	*gpios;
+	int		num_gpios;
+	int		*gpios;
 };
 
 static struct cfafiq_data *cfa10049_fiq_data;
@@ -236,6 +236,48 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	cfa10049_fiq_data->num_gpios = of_gpio_named_count(np,
+							   "crystalfontz,fiq-gpios");
+	if (cfa10049_fiq_data->num_gpios <= 0) {
+		dev_err(&pdev->dev, "Invalid or no gpios given, error %d\n",
+			cfa10049_fiq_data->num_gpios);
+		return -EINVAL;
+	}
+
+	cfa10049_fiq_data->gpios = devm_kzalloc(&pdev->dev,
+						sizeof(unsigned int) * cfa10049_fiq_data->num_gpios,
+						GFP_KERNEL);
+	if (!cfa10049_fiq_data->gpios)
+		return -ENOMEM;
+
+	for (i = 0; i < cfa10049_fiq_data->num_gpios; i++) {
+		cfa10049_fiq_data->gpios[i] = of_get_named_gpio(np,
+								"crystalfontz,fiq-gpios",
+								i);
+
+		if (cfa10049_fiq_data->gpios[i] == -EPROBE_DEFER) {
+			dev_info(&pdev->dev,
+				 "GPIO requested is not here yet, deferring the probe\n");
+			return -EPROBE_DEFER;
+		}
+
+		if (!gpio_is_valid(cfa10049_fiq_data->gpios[i])) {
+			dev_err(&pdev->dev, "Invalid GPIO given\n");
+			return -EINVAL;
+		}
+
+		ret = devm_gpio_request_one(&pdev->dev,
+					    cfa10049_fiq_data->gpios[i],
+					    GPIOF_OUT_INIT_LOW, "fiq-pins");
+		if (ret) {
+			dev_err(&pdev->dev,
+				"failed to request gpio %d: %d\n",
+				cfa10049_fiq_data->gpios[i],
+				ret);
+			return -EINVAL;
+		}
+	}
+
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx28-icoll");
 	cfa10049_fiq_data->icoll_base = of_iomap(np, 0);
 	if (!cfa10049_fiq_data->icoll_base)
@@ -256,46 +298,6 @@ static int cfafiq_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	clk_prepare_enable(cfa10049_fiq_data->timer_clk);
-
-	cfa10049_fiq_data->num_gpios = of_gpio_named_count(np,
-							   "crystalfontz,fiq-gpios");
-	if (!cfa10049_fiq_data->num_gpios) {
-		dev_err(&pdev->dev, "No gpio given\n");
-		return -EINVAL;
-	}
-
-	cfa10049_fiq_data->gpios = devm_kzalloc(&pdev->dev,
-						sizeof(unsigned int) * cfa10049_fiq_data->num_gpios,
-						GFP_KERNEL);
-	if (!cfa10049_fiq_data->gpios)
-		return -ENOMEM;
-
-	for (i = 0; i < cfa10049_fiq_data->num_gpios; i++) {
-		cfa10049_fiq_data->gpios[i] = of_get_named_gpio(np,
-								"crystalfontz,fiq-gpios",
-								i);
-
-		if (cfa10049_fiq_data->gpios[i] == -EPROBE_DEFER) {
-			dev_info(&pdev->dev, "GPIO requested is not here yet, deferring the probe\n");
-			return -EPROBE_DEFER;
-		}
-
-		if (!gpio_is_valid(cfa10049_fiq_data->gpios[i])) {
-			dev_err(&pdev->dev, "Invalid GPIO given\n");
-			return -EINVAL;
-		}
-
-		ret = devm_gpio_request_one(&pdev->dev,
-					    cfa10049_fiq_data->gpios[i],
-					    GPIOF_OUT_INIT_LOW, "fiq-pins");
-		if (ret) {
-			dev_err(&pdev->dev,
-				"failed to request gpio %d: %d\n",
-				cfa10049_fiq_data->gpios[i],
-				ret);
-			return -EINVAL;
-		}
-	}
 
 	cfa10049_fiq_data->fiq_base = dma_zalloc_coherent(&pdev->dev,
 							  FIQ_BUFFER_SIZE,
