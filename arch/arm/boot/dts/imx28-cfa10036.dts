@@ -94,6 +94,10 @@
 			usbphy0: usbphy@8007c000 {
 				status = "okay";
 			};
+
+			lradc@80050000 {
+				status = "okay";
+			};
 		};
 	};
 
