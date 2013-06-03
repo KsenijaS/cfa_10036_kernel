@@ -95,7 +95,7 @@
 				status = "okay";
 			};
 
-			lradc@80050000 {
+			lradc: lradc@80050000 {
 				status = "okay";
 			};
 		};
@@ -120,5 +120,11 @@
 			gpios = <&gpio3 4 1>;
 			default-state = "on";
 		};
+	};
+
+	temp {
+		compatible = "fsl,mxs-internal-temp";
+		io-channels = <&lradc 8>, <&lradc 9>;
+		io-channel-names = "min", "max";
 	};
 };
