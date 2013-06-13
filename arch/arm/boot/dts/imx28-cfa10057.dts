@@ -119,6 +119,19 @@
 				status = "okay";
 			};
 
+			i2c0: i2c@80058000 {
+				accel: accel@19 {
+					compatible = "st,lsm330dlc-accel";
+					reg = <0x19>;
+				};
+
+				gyro: gyro@6a {
+					compatible = "st,lsm330dlc-gyro";
+					reg = <0x6a>;
+				};
+			};
+
+
 			i2c1: i2c@8005a000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&i2c1_pins_a>;
