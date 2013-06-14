@@ -101,6 +101,8 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&usb0_otg_cfa10036>;
 			status = "okay";
+			dr_mode = "peripheral";
+			phy_type = "utmi";
 		};
 	};
 
