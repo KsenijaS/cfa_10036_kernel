@@ -150,11 +150,7 @@
 						0x0043 /* MX28_PAD_GPMI_D04__GPIO_0_4 */
 						0x0053 /* MX28_PAD_GPMI_D05__GPIO_0_5 */
 						0x0063 /* MX28_PAD_GPMI_D06__GPIO_0_6 */
-<<<<<<< HEAD
-						0x0103 /* MX23_PAD_GPMI_CLE__GPIO_0_16 */
-=======
 						0x0103 /* MX28_PAD_GPMI_CE1N__GPIO_0_16 */
->>>>>>> cfa-3.9-14-fiq-fixes
 						0x0153 /* MX28_PAD_GPMI_RDY1__GPIO_0_21 */
 						0x0193 /* MX28_PAD_GPMI_WRN__GPIO_0_25 */
 					>;
