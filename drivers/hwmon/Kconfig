@@ -929,6 +929,16 @@ config SENSORS_MCP3021
 	  This driver can also be built as a module.  If so, the module
 	  will be called mcp3021.
 
+config SENSORS_MXS_CPU
+	tristate "MXS internal CPU temperature sensor"
+	depends on MXS_LRADC
+	help
+	  If you say yes here you get support for the i.mx28 internal
+	  temperature sensor.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called mxs-cputemp
+
 config SENSORS_NCT6775
 	tristate "Nuvoton NCT6775F and compatibles"
 	depends on !PPC
