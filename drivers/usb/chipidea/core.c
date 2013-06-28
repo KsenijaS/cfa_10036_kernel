@@ -385,6 +385,8 @@ static void ci_handle_id_switch(struct ci13xxx *ci)
 		/* 3. Begin the new role */
 		ci_role_start(ci, role);
 	}
+
+	enable_irq(ci->irq);
 }
 
 static void ci_handle_vbus_change(struct ci13xxx *ci)
