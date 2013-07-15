@@ -48,6 +48,12 @@
 			usbphy1: usbphy@8007e000 {
 				status = "okay";
 			};
+
+			i2c1: i2c@8005a000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&i2c1_pins_a>;
+				status = "okay";
+			};
 		};
 	};
 
@@ -67,7 +73,7 @@
 			phy-reset-gpios = <&gpio2 21 0>;
 			phy-reset-duration = <100>;
 			status = "okay";
-		};
+		}; 
 	};
 
 	regulators {
