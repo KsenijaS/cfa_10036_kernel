@@ -97,6 +97,11 @@
 			lradc: lradc@80050000 {
 				status = "okay";
 			};
+			
+			hsadc@80002000 {
+				status = "okay";
+			};
+
 		};
 	};
 
