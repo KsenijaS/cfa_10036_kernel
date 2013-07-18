@@ -99,7 +99,6 @@
 			};
 			
 			hsadc@80002000 {
-				interrupts = <13>;
 				status = "okay";
 			};
 
