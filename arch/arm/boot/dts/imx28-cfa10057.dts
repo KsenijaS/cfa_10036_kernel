@@ -115,7 +115,7 @@
 
 			pwm: pwm@80064000 {
 				pinctrl-names = "default";
-				pinctrl-0 = <&pwm4_pins_b>;
+				pinctrl-0 = <&pwm4_pins_a>;
 				status = "okay";
 			};
 
