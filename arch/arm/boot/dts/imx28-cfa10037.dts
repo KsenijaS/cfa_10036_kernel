@@ -35,6 +35,16 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
+
+				w1_gpio_pins: w1-gpio@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x1153 /* MX28_PAD_LCD_D21__GPIO_1_21 */
+					>;
+					fsl,drive-strength = <1>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>; /* 0 will enable the keeper */
+				};
 			};
 		};
 
@@ -61,6 +71,14 @@
 			phy-reset-duration = <100>;
 			status = "okay";
 		};
+	};
+
+	onewire@0 {
+		compatible = "w1-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&w1_gpio_pins>;
+		status = "okay";
+		gpios = <&gpio1 21 0>;
 	};
 
 	regulators {
