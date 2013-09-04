@@ -93,8 +93,10 @@ ENTRY(cfa10049_fiq_handler)
 	add	r12, r12, r11
 	/* Store the 1st cell in the timer control register */
 	ldr	r11, [r12, #TIMER_OFFSET]
-	add	r11, r11, r11, lsl #1
-	lsl	r11, r11, #3
+/* convert from microseconds to microseconds/24 */
+/* clock is HW_TIMROT is 24MHz */
+/*	add	r11, r11, r11, lsl #1 */
+/* 	lsl	r11, r11, #3 */
 	str	r11, [r8, #HW_TIMROT_FIXED_COUNT2]
 	/* Store the 2nd cell in the PIO clear register */
 	ldr	r11, [r12, #CLR_OFFSET]
