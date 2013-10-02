@@ -309,9 +309,6 @@ static int mxsfb_check_var(struct fb_var_screeninfo *var,
 			break;
 		case STMLCDIF_16BIT:
 		case STMLCDIF_18BIT:
-			/* 24 bit to 18 bit mapping */
-			rgb = def_rgb666;
-			break;
 		case STMLCDIF_24BIT:
 			/* real 24 bit */
 			rgb = def_rgb888;
