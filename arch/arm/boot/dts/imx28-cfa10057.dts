@@ -141,6 +141,13 @@
 			usbphy1: usbphy@8007e000 {
 				status = "okay";
 			};
+
+			auart4: serial@80072000 {
+				compatible = "fsl,imx28-auart", "fsl,imx23-auart";
+				pinctrl-names = "default";
+				pinctrl-0 = <&auart4_2pins_b>;
+				status = "okay";
+			};
 		};
 	};
 
