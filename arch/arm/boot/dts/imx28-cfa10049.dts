@@ -34,6 +34,16 @@
 	apb@80000000 {
 		apbh@80000000 {
 			pinctrl@80018000 {
+				gpio_595_reset_pins_cfa10049: 595-reset-10049@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x31d3 /* MX28_PAD_PWM4__GPIO_3_29 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
 				usb_pins_cfa10049: usb-10049@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -403,6 +413,7 @@
 			reg = <0>;
 			registers-number = <2>;
 			spi-max-frequency = <100000>;
+			resets = <&gpio_595_reset>;
 		};
 
 		gpio6: gpio6@1 {
@@ -412,6 +423,7 @@
 			reg = <1>;
 			registers-number = <4>;
 			spi-max-frequency = <100000>;
+			resets = <&gpio_595_reset>;
 		};
 
 		dac0: dh2228@2 {
@@ -480,5 +492,14 @@
 					&gpio0 21 0 /* STEP_B */
 					&gpio0 25 0 /* DIR_B */
 					>;
+	};
+
+	gpio_595_reset: gpio-reset {
+		#reset-cells = <0>;
+		compatible = "gpio-reset";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_595_reset_pins_cfa10049>;
+		reset-gpios = <&gpio3 29 1>;
+		initially-in-reset;
 	};
 };
