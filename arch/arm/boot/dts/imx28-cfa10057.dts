@@ -33,6 +33,19 @@
 					fsl,pull-up = <0>;
 				};
 
+				spi2_pins_cfa10057: spi2-cfa10057@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x2103 /* MX28_PAD_SSP2_SCK__GPIO_2_16 */
+						0x2113 /* MX28_PAD_SSP2_CMD__GPIO_2_17 */
+						0x2123 /* MX28_PAD_SSP2_D0__GPIO_2_18 */
+						0x3053 /* MX28_PAD_AUART1_TX__GPIO_3_5 */
+					>;
+					fsl,drive-strength = <1>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <1>;
+				};
+
 				lcdif_18bit_pins_cfa10057: lcdif-18bit@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -72,12 +85,23 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
+
+				lcdif_pins_cfa10057_pullup: lcdif-10057-pullup@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x31e3 /* MX28_PAD_LCD_RESET__GPIO_3_30 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <1>;
+				};
 			};
 
 			lcdif@80030000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&lcdif_18bit_pins_cfa10057
-					     &lcdif_pins_cfa10057>;
+					     &lcdif_pins_cfa10057
+					     &lcdif_pins_cfa10057_pullup>;
 				display = <&display>;
 				status = "okay";
 
@@ -115,7 +139,7 @@
 
 			pwm: pwm@80064000 {
 				pinctrl-names = "default";
-				pinctrl-0 = <&pwm3_pins_b>;
+				pinctrl-0 = <&pwm4_pins_a>;
 				status = "okay";
 			};
 
@@ -141,6 +165,14 @@
 			usbphy1: usbphy@8007e000 {
 				status = "okay";
 			};
+			/*
+			auart4: serial@80072000 {
+				compatible = "fsl,imx28-auart", "fsl,imx23-auart";
+				pinctrl-names = "default";
+				pinctrl-0 = <&auart4_2pins_b>;
+				status = "okay";
+			};
+			*/
 		};
 	};
 
@@ -178,10 +210,33 @@
 		};
 	};
 
+	spi2 {
+		compatible = "spi-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi2_pins_cfa10057>;
+		status = "okay";
+		gpio-sck = <&gpio2 16 0>;
+		gpio-mosi = <&gpio2 17 0>;
+		gpio-miso = <&gpio2 18 0>;
+		cs-gpios = <&gpio3 5 0>;
+		num-chipselects = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		rm68120: rm68120@0 {
+			compatible = "raydium,rm68120";
+			reg = <0>;
+			spi-max-frequency = <100000>;
+			spi-cpol;
+			spi-cpha;
+			gpios-reset = <&gpio3 30 0>;
+		};
+	};
+
 	backlight {
 		compatible = "pwm-backlight";
-		pwms = <&pwm 3 5000000>;
+		pwms = <&pwm 4 5000000>;
 		brightness-levels = <0 4 8 16 32 64 128 255>;
-		default-brightness-level = <7>;
+		default-brightness-level = <6>;
 	};
 };
