@@ -113,8 +113,6 @@ static irqreturn_t cfafiq_handler(int irq, void *private)
 		"add	r12, r12, r11		\n"
 		/* Store the 1st cell in the timer control register */
 		"ldr	r11, [r12, #0]		\n"
-		"add	r11, r11, r11, lsl #1	\n"
-		"lsl	r11, r11, #3		\n"
 		"str	r11, [r8, #0xc0]	\n"
 		/* Store the 2nd cell in the PIO clear register */
 		"ldr	r11, [r12, #4]		\n"
