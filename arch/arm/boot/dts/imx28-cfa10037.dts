@@ -98,7 +98,7 @@
 				status = "okay";
 			};
 
-			auart4: serial@8006e000 {
+			auart4: serial@80072000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&auart4_2pins_b>;
 				status = "okay";
