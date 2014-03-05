@@ -21,15 +21,28 @@
 
 	apb@80000000 {
 		apbh@80000000 {
+			ssp2: ssp@80014000 {
+				compatible = "fsl,imx28-spi";
+				pinctrl-names = "default";
+				pinctrl-0 = <&spi2_pins_a>;
+				status = "okay";
+
+				spidev@0 {
+							compatible = "spidev";
+							spi-max-frequency = <60000000>;
+							reg = <1>;
+				};
+			};
+
 			ssp3: ssp@80016000 {
 				compatible = "fsl,imx28-spi";
 				pinctrl-names = "default";
 				pinctrl-0 = <&spi3_pins_b>;
 				status = "okay";
 
-				spidev@0 {
+				spidev@1 {
 							compatible = "spidev";
-							spi-max-frequency = <30000000>;
+							spi-max-frequency = <60000000>;
 							reg = <1>;
 				};
 			};
@@ -77,6 +90,13 @@
 			i2c1: i2c@8005a000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&i2c1_pins_a>;
+				status = "okay";
+			};
+			
+			auart4: serial@80072000 {
+				compatible = "fsl,imx28-auart", "fsl,imx23-auart";
+				pinctrl-names = "default";
+				pinctrl-0 = <&auart4_2pins_b>;
 				status = "okay";
 			};
 		};

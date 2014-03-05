@@ -354,7 +354,7 @@
 					fsl,pull-up = <0>;
 				};
 
-				auart4_2pins_a: auart4-2pins@0 {
+				auart4_2pins_a: auart4@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
 						0x3021 /* MX28_PAD_AUART0_CTS__AUART4_RX */
@@ -365,6 +365,17 @@
 					fsl,pull-up = <0>;
 				};
 
+                auart4_2pins_b: auart4-2pins@0 {
+                    reg = <0>;
+                    fsl,pinmux-ids = <
+                        0x3172 /* MX28_PAD_SAIF0_SDATA0__AUART4_TX */
+                        0x3162 /* MX28_PAD_SAIF0_BITCLK__AUART4_RX */
+                    >;
+                    fsl,drive-strength = <0>;
+                    fsl,voltage = <1>;
+                    fsl,pull-up = <0>;
+                };
+                
 				mac0_pins_a: mac0@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -654,7 +665,7 @@
 						0x2180 /* MX28_PAD_SSP3_SCK__SSP3_SCK */
 						0x2190 /* MX28_PAD_SSP3_MOSI__SSP3_CMD */
 						0x21A0 /* MX28_PAD_SSP3_MISO__SSP3_D0 */
-            0x21B0 /* MX28_PAD_SSP3_SS0__SSP3_D3 */
+						0x21B0 /* MX28_PAD_SSP3_SS0__SSP3_D3 */
 					>;
 					fsl,drive-strength = <1>;
 					fsl,voltage = <1>;
