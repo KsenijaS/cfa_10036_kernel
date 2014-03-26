@@ -10,6 +10,9 @@ Required properties:
       1 = active low
 - registers-number: Number of daisy-chained shift registers
 
+Optional properties:
+- resets: phandle pointing to the reset controller of this device
+
 Example:
 
 gpio5: gpio5@0 {
@@ -19,4 +22,5 @@ gpio5: gpio5@0 {
 	#gpio-cells = <2>;
 	registers-number = <4>;
 	spi-max-frequency = <100000>;
+	reset-gpios = <&gpio_595_reset>;
 };
