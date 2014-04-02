@@ -311,7 +311,7 @@ EXPORT_SYMBOL_GPL(usb_put_phy);
 
 /**
  * usb_add_phy - declare the USB PHY
- * @x: the USB phy to be used; or NULL
+ * @x: the USB phy to be used;
  * @type - the type of this PHY
  *
  * This call is exclusively for use by phy drivers, which
@@ -351,7 +351,7 @@ EXPORT_SYMBOL_GPL(usb_add_phy);
 
 /**
  * usb_add_phy_dev - declare the USB PHY
- * @x: the USB phy to be used; or NULL
+ * @x: the USB phy to be used;
  *
  * This call is exclusively for use by phy drivers, which
  * coordinate the activities of drivers for host and peripheral

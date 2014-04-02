@@ -5,6 +5,12 @@ Required properties:
 - reg: Should contain registers location and length
 - interrupts: Should contain controller interrupt
 
+Recommended properies:
+- phy_type: the type of the phy connected to the core. Should be one
+  of "utmi", "utmi_wide", "ulpi", "serial" or "hsic". Without this
+  property the PORTSC register won't be touched
+- dr_mode: One of "host", "peripheral" or "otg". Defaults to "otg"
+
 Optional properties:
 - fsl,usbphy: phandler of usb phy that connects to the only one port
 - fsl,usbmisc: phandler of non-core register device, with one argument
@@ -12,6 +18,11 @@ Optional properties:
 - vbus-supply: regulator for vbus
 - disable-over-current: disable over current detect
 - external-vbus-divider: enables off-chip resistor divider for Vbus
+- otg_id_pin_select_change: for platforms who have otg_id_pin selection
+(Currently, only imx6 has this selection), and need to change
+default value, please add this flag. Below is the pin selection for imx6q:
+	- ENET_RX_ER: 0  (defalt)
+	- GPIO_1: 1
 
 Examples:
 usb@02184000 { /* USB OTG */
@@ -22,4 +33,5 @@ usb@02184000 { /* USB OTG */
 	fsl,usbmisc = <&usbmisc 0>;
 	disable-over-current;
 	external-vbus-divider;
+	otg_id_pin_select_change;
 };
