@@ -16,6 +16,7 @@
 #include <linux/list.h>
 #include <linux/irqreturn.h>
 #include <linux/usb.h>
+#include <linux/usb/otg.h>
 #include <linux/usb/gadget.h>
 
 /******************************************************************************
@@ -131,6 +132,11 @@ struct hw_bank {
  * @transceiver: pointer to USB PHY, if any
  * @hcd: pointer to usb_hcd for ehci host driver
  * @debugfs: root dentry for this controller in debugfs
+ * @otg: for otg support
+ * @id_event: indicates there is a id event, and handled at ci_otg_work
+ * @b_sess_valid_event: indicates there is a vbus event, and handled
+ * at ci_otg_work
+ * @reg_vbus: used to control internal vbus regulator
  */
 struct ci13xxx {
 	struct device			*dev;
@@ -167,6 +173,10 @@ struct ci13xxx {
 	struct usb_phy			*transceiver;
 	struct usb_hcd			*hcd;
 	struct dentry			*debugfs;
+	struct usb_otg      		otg;
+	bool				id_event;
+	bool				b_sess_valid_event;
+	struct regulator		*reg_vbus;
 };
 
 static inline struct ci_role_driver *ci_role(struct ci13xxx *ci)
@@ -202,7 +212,6 @@ static inline void ci_role_stop(struct ci13xxx *ci)
 
 	ci->roles[role]->stop(ci);
 }
-
 /******************************************************************************
  * REGISTERS
  *****************************************************************************/
