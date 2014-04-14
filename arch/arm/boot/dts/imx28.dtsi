@@ -388,6 +388,17 @@
 					fsl,pull-up = <0>;
 				};
 
+                auart4_2pins_b: auart4-2pins@0 {
+                    reg = <0>;
+                    fsl,pinmux-ids = <
+                        0x3172 /* MX28_PAD_SAIF0_SDATA0__AUART4_TX */
+                        0x3162 /* MX28_PAD_SAIF0_BITCLK__AUART4_RX */
+                    >;
+                    fsl,drive-strength = <0>;
+                    fsl,voltage = <1>;
+                    fsl,pull-up = <0>;
+                };
+                
 				mac0_pins_a: mac0@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -584,6 +595,36 @@
 					reg = <0>;
 					fsl,pinmux-ids = <
 						0x31d0 /* MX28_PAD_PWM4__PWM_4 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+				pwm5_pins_a: pwm5@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x3161 /* MX28_PAD_SAIF0_BITCLK__PWM_5 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+				pwm6_pins_a: pwm6@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x3171 /* MX28_PAD_SAIF0_SDATA0__PWM_6 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+				pwm7_pins_a: pwm7@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x31a1 /* MX28_PAD_SAIF1_SDATA0__PWM_7 */
 					>;
 					fsl,drive-strength = <0>;
 					fsl,voltage = <1>;
@@ -902,6 +943,7 @@
 				interrupts = <10 14 15 16 17 18 19
 						20 21 22 23 24 25>;
 				status = "disabled";
+				#io-channel-cells = <1>;
 			};
 
 			spdif: spdif@80054000 {
