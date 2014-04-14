@@ -41,11 +41,66 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
+				
+				spi2_pins_cfa10037: spi2-cfa10037@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x2103 /* MX28_PAD_SSP2_SCK__GPIO_2_16 */
+						0x2113 /* MX28_PAD_SSP2_CMD__GPIO_2_17 */
+						0x2123 /* MX28_PAD_SSP2_D0__GPIO_2_18 */
+						0x3053 /* MX28_PAD_AUART1_TX__GPIO_3_5 */
+					>;
+					fsl,drive-strength = <1>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <1>;
+				};
 			};
 		};
 
 		apbx@80040000 {
 			usbphy1: usbphy@8007e000 {
+				status = "okay";
+			};
+
+			pwm2: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm2_pins_a>;
+				status = "okay";
+			};
+
+			pwm3: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm3_pins_b>;
+				status = "okay";
+			};
+
+			pwm4: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm4_pins_a>;
+				status = "okay";
+			};
+
+			pwm5: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm5_pins_a>;
+				status = "okay";
+			};
+
+			pwm6: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm6_pins_a>;
+				status = "okay";
+			};
+
+			pwm7: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm7_pins_a>;
+				status = "okay";
+			};
+
+			auart4: serial@80072000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&auart4_2pins_b>;
 				status = "okay";
 			};
 		};
@@ -68,6 +123,20 @@
 			phy-reset-duration = <100>;
 			status = "okay";
 		};
+	};
+
+	spi2 {
+		compatible = "spi-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi2_pins_cfa10037>;
+		status = "okay";
+		gpio-sck = <&gpio2 16 0>;
+		gpio-mosi = <&gpio2 17 0>;
+		gpio-miso = <&gpio2 18 0>;
+		cs-gpios = <&gpio3 5 0>;
+		num-chipselects = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
 	};
 
 	regulators {
