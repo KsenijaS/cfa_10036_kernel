@@ -30,7 +30,7 @@
 				spidev@0 {
 							compatible = "spidev";
 							spi-max-frequency = <60000000>;
-							reg = <1>;
+							reg = <0>;
 				};
 			};
 
@@ -43,7 +43,7 @@
 				spidev@1 {
 							compatible = "spidev";
 							spi-max-frequency = <60000000>;
-							reg = <1>;
+							reg = <0>;
 				};
 			};
 
@@ -86,6 +86,18 @@
 
 		apbx@80040000 {
 			usbphy1: usbphy@8007e000 {
+				status = "okay";
+			};
+
+			pwm0: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm0_pins_a>;
+				status = "okay";
+			};
+
+			pwm1: pwm@80064000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm1_pins_a>;
 				status = "okay";
 			};
 
