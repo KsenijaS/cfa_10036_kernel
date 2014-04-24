@@ -66,6 +66,7 @@ static int mxs_phy_init(struct usb_phy *phy)
 	struct mxs_phy *mxs_phy = to_mxs_phy(phy);
 
 	clk_prepare_enable(mxs_phy->clk);
+	udelay(200);
 	return mxs_phy_hw_init(mxs_phy);
 }
 
