@@ -323,6 +323,11 @@ fec_enet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	unsigned short	status;
 	unsigned int index;
 
+	if (!fep->link) {
+		/* Link is down or auto-negotiation is in progress. */
+		return NETDEV_TX_BUSY;
+	}
+
 	/* Fill in a Tx ring entry */
 	bdp = fep->cur_tx;
 
@@ -510,6 +515,11 @@ fec_restart(struct net_device *ndev, int duplex)
 		netif_stop_queue(ndev);
 		netif_tx_lock_bh(ndev);
 	}
+
+	if (!fep->link)
+		netif_carrier_off(ndev);
+	else
+		netif_carrier_on(ndev);
 
 	/* Whack a reset.  We should wait for this. */
 	writel(1, fep->hwp + FEC_ECNTRL);
