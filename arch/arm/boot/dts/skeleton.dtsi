@@ -7,7 +7,13 @@
 / {
 	#address-cells = <1>;
 	#size-cells = <1>;
-	chosen { };
+	chosen {
+		contiguous-memory {
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
+	};
 	aliases { };
 	memory { device_type = "memory"; reg = <0 0>; };
 };
+

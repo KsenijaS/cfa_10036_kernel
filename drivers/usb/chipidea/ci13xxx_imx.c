@@ -21,19 +21,22 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/usb/of.h>
+#include <linux/regmap.h>
+#include <linux/mfd/syscon.h>
 
 #include "ci.h"
 #include "ci13xxx_imx.h"
 
 #define pdev_to_phy(pdev) \
 	((struct usb_phy *)platform_get_drvdata(pdev))
+#define IOMUXC_IOMUXC_GPR1			0x00000004
+#define USB_OTG_ID_SEL_BIT			(1<<13)
 
 struct ci13xxx_imx_data {
-	struct device_node *phy_np;
 	struct usb_phy *phy;
 	struct platform_device *ci_pdev;
 	struct clk *clk;
-	struct regulator *reg_vbus;
 };
 
 static const struct usbmisc_ops *usbmisc_ops;
@@ -88,27 +91,35 @@ EXPORT_SYMBOL_GPL(usbmisc_get_init_data);
 
 /* End of common functions shared by usbmisc drivers*/
 
-static struct ci13xxx_platform_data ci13xxx_imx_platdata  = {
-	.name			= "ci13xxx_imx",
-	.flags			= CI13XXX_REQUIRE_TRANSCEIVER |
-				  CI13XXX_PULLUP_ON_VBUS |
-				  CI13XXX_DISABLE_STREAMING,
-	.capoffset		= DEF_CAPOFFSET,
-};
-
 static int ci13xxx_imx_probe(struct platform_device *pdev)
 {
 	struct ci13xxx_imx_data *data;
-	struct platform_device *plat_ci, *phy_pdev;
-	struct device_node *phy_np;
+	struct ci13xxx_platform_data *pdata;
+	struct platform_device *plat_ci;
 	struct resource *res;
 	struct regulator *reg_vbus;
 	struct pinctrl *pinctrl;
 	int ret;
+	struct usb_phy *phy;
 
 	if (of_find_property(pdev->dev.of_node, "fsl,usbmisc", NULL)
 		&& !usbmisc_ops)
 		return -EPROBE_DEFER;
+
+	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata) {
+		dev_err(&pdev->dev, "Failed to allocate CI13xxx-IMX pdata!\n");
+		return -ENOMEM;
+	}
+
+	pdata->name = "ci13xxx_imx";
+	pdata->capoffset = DEF_CAPOFFSET;
+	pdata->flags = CI13XXX_REQUIRE_TRANSCEIVER |
+		       CI13XXX_DISABLE_STREAMING | 
+		       CI13XXX_REGS_SHARED;
+
+	pdata->phy_mode = of_usb_get_phy_mode(pdev->dev.of_node);
+	pdata->dr_mode = of_usb_get_dr_mode(pdev->dev.of_node);
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data) {
@@ -141,37 +152,28 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	phy_np = of_parse_phandle(pdev->dev.of_node, "fsl,usbphy", 0);
-	if (phy_np) {
-		data->phy_np = phy_np;
-		phy_pdev = of_find_device_by_node(phy_np);
-		if (phy_pdev) {
-			struct usb_phy *phy;
-			phy = pdev_to_phy(phy_pdev);
-			if (phy &&
-			    try_module_get(phy_pdev->dev.driver->owner)) {
-				usb_phy_init(phy);
-				data->phy = phy;
-			}
-		}
+	phy = devm_usb_get_phy_by_phandle(&pdev->dev, "fsl,usbphy", 0);
+
+	if (PTR_ERR(phy) == -EPROBE_DEFER) {
+		ret = -EPROBE_DEFER;
+		goto err_clk;
 	}
 
-	/* we only support host now, so enable vbus here */
-	reg_vbus = devm_regulator_get(&pdev->dev, "vbus");
-	if (!IS_ERR(reg_vbus)) {
-		ret = regulator_enable(reg_vbus);
+	if (!IS_ERR(phy)) {
+		ret = usb_phy_init(phy);
 		if (ret) {
-			dev_err(&pdev->dev,
-				"Failed to enable vbus regulator, err=%d\n",
-				ret);
-			goto put_np;
+			dev_err(&pdev->dev, "unable to init phy: %d\n", ret);
+			goto err_clk;
 		}
-		data->reg_vbus = reg_vbus;
-	} else {
-		reg_vbus = NULL;
+
+		data->phy = phy;
 	}
 
-	ci13xxx_imx_platdata.phy = data->phy;
+	reg_vbus = devm_regulator_get(&pdev->dev, "vbus");
+	if (!IS_ERR(reg_vbus))
+		pdata->reg_vbus = reg_vbus;
+
+	pdata->phy = data->phy;
 
 	if (!pdev->dev.dma_mask)
 		pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
@@ -183,19 +185,43 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"usbmisc init failed, ret=%d\n", ret);
-			goto err;
+			goto err_clk;
 		}
 	}
 
+#if IS_ENABLED(CONFIG_MFD_SYSCON)
+	/* Any imx6 user who needs to change id select pin, do below */
+	if (of_find_property(pdev->dev.of_node,
+				"otg_id_pin_select_change", NULL)) {
+		struct regmap *iomuxc_gpr;
+		u32 gpr1 = 0;
+
+		iomuxc_gpr = syscon_regmap_lookup_by_compatible
+			("fsl,imx6q-iomuxc-gpr");
+		if (!IS_ERR(iomuxc_gpr)) {
+			/* Select USB ID pin at iomuxc grp1 */
+			regmap_read(iomuxc_gpr, IOMUXC_IOMUXC_GPR1, &gpr1);
+			regmap_write(iomuxc_gpr, IOMUXC_IOMUXC_GPR1,
+					gpr1 | USB_OTG_ID_SEL_BIT);
+		} else {
+			ret = PTR_ERR(iomuxc_gpr);
+			dev_err(&pdev->dev,
+				"failed to find imx6q-iomuxc-gpr regmap:%d\n",
+				ret);
+			goto err_clk;
+		}
+	}
+#endif
+
 	plat_ci = ci13xxx_add_device(&pdev->dev,
 				pdev->resource, pdev->num_resources,
-				&ci13xxx_imx_platdata);
+				pdata);
 	if (IS_ERR(plat_ci)) {
 		ret = PTR_ERR(plat_ci);
 		dev_err(&pdev->dev,
 			"Can't register ci_hdrc platform device, err=%d\n",
 			ret);
-		goto err;
+		goto err_clk;
 	}
 
 	if (usbmisc_ops && usbmisc_ops->post) {
@@ -203,7 +229,7 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"usbmisc post failed, ret=%d\n", ret);
-			goto put_np;
+			goto err_clk;
 		}
 	}
 
@@ -215,12 +241,7 @@ static int ci13xxx_imx_probe(struct platform_device *pdev)
 
 	return 0;
 
-err:
-	if (reg_vbus)
-		regulator_disable(reg_vbus);
-put_np:
-	if (phy_np)
-		of_node_put(phy_np);
+err_clk:
 	clk_disable_unprepare(data->clk);
 	return ret;
 }
@@ -232,15 +253,10 @@ static int ci13xxx_imx_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 	ci13xxx_remove_device(data->ci_pdev);
 
-	if (data->reg_vbus)
-		regulator_disable(data->reg_vbus);
-
 	if (data->phy) {
 		usb_phy_shutdown(data->phy);
 		module_put(data->phy->dev->driver->owner);
 	}
-
-	of_node_put(data->phy_np);
 
 	clk_disable_unprepare(data->clk);
 

@@ -197,6 +197,14 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 	if (IS_ERR(data->base))
 		return PTR_ERR(data->base);
 
+	tmp_dev = (struct of_device_id *)
+		of_match_device(usbmisc_imx_dt_ids, &pdev->dev);
+	data->ops = (const struct usbmisc_ops *)tmp_dev->data;
+
+	/* on i.MX6, the USBMISC layout is part of the ANATOP syscon region */
+	if (data->ops == &imx6q_usbmisc_ops)
+		goto skip_clocks;
+
 	data->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev,
@@ -211,9 +219,7 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	tmp_dev = (struct of_device_id *)
-		of_match_device(usbmisc_imx_dt_ids, &pdev->dev);
-	data->ops = (const struct usbmisc_ops *)tmp_dev->data;
+ skip_clocks:
 	usbmisc = data;
 	ret = usbmisc_set_ops(data->ops);
 	if (ret) {
@@ -243,17 +249,7 @@ static struct platform_driver usbmisc_imx_driver = {
 	 },
 };
 
-int usbmisc_imx_drv_init(void)
-{
-	return platform_driver_register(&usbmisc_imx_driver);
-}
-subsys_initcall(usbmisc_imx_drv_init);
-
-void usbmisc_imx_drv_exit(void)
-{
-	platform_driver_unregister(&usbmisc_imx_driver);
-}
-module_exit(usbmisc_imx_drv_exit);
+module_platform_driver(usbmisc_imx_driver);
 
 MODULE_ALIAS("platform:usbmisc-imx");
 MODULE_LICENSE("GPL v2");
