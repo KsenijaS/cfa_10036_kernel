@@ -21,32 +21,6 @@
 
 	apb@80000000 {
 		apbh@80000000 {
-			ssp2: ssp@80014000 {
-				compatible = "fsl,imx28-spi";
-				pinctrl-names = "default";
-				pinctrl-0 = <&spi2_pins_a>;
-				status = "okay";
-
-				spidev@0 {
-							compatible = "spidev";
-							spi-max-frequency = <60000000>;
-							reg = <0>;
-				};
-			};
-
-			ssp3: ssp@80016000 {
-				compatible = "fsl,imx28-spi";
-				pinctrl-names = "default";
-				pinctrl-0 = <&spi3_pins_b>;
-				status = "okay";
-
-				spidev@1 {
-							compatible = "spidev";
-							spi-max-frequency = <60000000>;
-							reg = <0>;
-				};
-			};
-
 			pinctrl@80018000 {
 				usb_pins_cfa10037: usb-10037@0 {
 					reg = <0>;
@@ -67,15 +41,15 @@
 					fsl,voltage = <1>;
 					fsl,pull-up = <0>;
 				};
-				
 
-				spi2_pins_cfa10037: spi2-cfa10037@0 {
+				spi3_pins_cfa10037: spi3-cfa10037@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
-						0x2103 /* MX28_PAD_SSP2_SCK__GPIO_2_16 */
-						0x2113 /* MX28_PAD_SSP2_CMD__GPIO_2_17 */
-						0x2123 /* MX28_PAD_SSP2_D0__GPIO_2_18 */
-						0x3053 /* MX28_PAD_AUART1_TX__GPIO_3_5 */
+						0x0183 /* MX28_PAD_GPMI_RDN__GPIO_0_24 */
+						0x01c3 /* MX28_PAD_GPMI_RESETN__GPIO_0_28 */
+						0x0113 /* MX28_PAD_GPMI_CE1N__GPIO_0_17 */
+						0x01a3 /* MX28_PAD_GPMI_ALE__GPIO_0_26 */
+						0x01b3 /* MX28_PAD_GPMI_CLE__GPIO_0_27 */
 					>;
 					fsl,drive-strength = <1>;
 					fsl,voltage = <1>;
@@ -86,54 +60,6 @@
 
 		apbx@80040000 {
 			usbphy1: usbphy@8007e000 {
-				status = "okay";
-			};
-
-			pwm0: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm0_pins_a>;
-				status = "okay";
-			};
-
-			pwm1: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm1_pins_a>;
-				status = "okay";
-			};
-
-			pwm2: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm2_pins_a>;
-				status = "okay";
-			};
-
-			pwm3: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm3_pins_c>;
-				status = "okay";
-			};
-
-			pwm4: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm4_pins_b>;
-				status = "okay";
-			};
-
-			pwm5: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm5_pins_a>;
-				status = "okay";
-			};
-
-			pwm6: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm6_pins_a>;
-				status = "okay";
-			};
-
-			pwm7: pwm@80064000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&pwm7_pins_a>;
 				status = "okay";
 			};
 
@@ -161,6 +87,93 @@
 			phy-reset-gpios = <&gpio2 21 0>;
 			phy-reset-duration = <100>;
 			status = "okay";
+		};
+	};
+
+	pwm0: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm0_pins_a>;
+		status = "okay";
+	};
+
+	pwm1: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm1_pins_a>;
+		status = "okay";
+	};
+
+	pwm2: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm2_pins_a>;
+		status = "okay";
+	};
+
+	pwm3: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm3_pins_a>;
+		status = "okay";
+	};
+
+	pwm4: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm4_pins_b>;
+		status = "okay";
+	};
+
+	pwm5: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm5_pins_a>;
+		status = "okay";
+	};
+
+	pwm6: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm6_pins_a>;
+		status = "okay";
+	};
+
+	pwm7: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm7_pins_a>;
+		status = "okay";
+	};
+
+	spi3 {
+		compatible = "spi-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spi3_pins_cfa10037>;
+		status = "okay";
+		gpio-sck = <&gpio0 24 0>;
+		gpio-mosi = <&gpio0 28 0>;
+		cs-gpios = <&gpio0 17 0 &gpio0 26 0 &gpio0 27 0>;
+		num-chipselects = <3>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		spidev0: spidev@0 {
+			compatible = "linux,spidev";
+			reg = <0>;
+			spi-max-frequency = <24000000>;
+		};
+
+		spidev1: spidev@1 {
+			compatible = "linux,spidev";
+			reg = <1>;
+			spi-max-frequency = <24000000>;
+		};
+
+		spidev2: spidev@2 {
+			compatible = "linux,spidev";
+			reg = <2>;
+			spi-max-frequency = <24000000>;
 		};
 	};
 
