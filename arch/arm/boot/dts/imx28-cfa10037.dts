@@ -10,7 +10,7 @@
  */
 
 /*
- * The CFA-10049 is an expansion board for the CFA-10036 module, thus we
+ * The CFA-10037 is an expansion board for the CFA-10036 module, thus we
  * need to include the CFA-10036 DTS.
  */
 /include/ "imx28-cfa10036.dts"
@@ -42,19 +42,6 @@
 					fsl,pull-up = <0>;
 				};
 
-				spi3_pins_cfa10037: spi3-cfa10037@0 {
-					reg = <0>;
-					fsl,pinmux-ids = <
-						0x0183 /* MX28_PAD_GPMI_RDN__GPIO_0_24 */
-						0x01c3 /* MX28_PAD_GPMI_RESETN__GPIO_0_28 */
-						0x0113 /* MX28_PAD_GPMI_CE1N__GPIO_0_17 */
-						0x01a3 /* MX28_PAD_GPMI_ALE__GPIO_0_26 */
-						0x01b3 /* MX28_PAD_GPMI_CLE__GPIO_0_27 */
-					>;
-					fsl,drive-strength = <1>;
-					fsl,voltage = <1>;
-					fsl,pull-up = <1>;
-				};
 			};
 		};
 
@@ -84,6 +71,62 @@
 		};
 	};
 
+	pwm0: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm0_pins_a>;
+		status = "okay";
+	};
+
+	pwm1: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm1_pins_a>;
+		status = "okay";
+	};
+
+	pwm2: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm2_pins_a>;
+		status = "okay";
+	};
+
+	pwm3: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm3_pins_a>;
+		status = "okay";
+	};
+
+	pwm4: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm4_pins_b>;
+		status = "okay";
+	};
+
+	pwm5: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm5_pins_a>;
+		status = "okay";
+	};
+
+	pwm6: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm6_pins_a>;
+		status = "okay";
+	};
+
+	pwm7: pwm@80064000 {
+		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm7_pins_a>;
+		status = "okay";
+	};
+
 	spi3 {
 		compatible = "spi-gpio";
 		pinctrl-names = "default";
@@ -99,19 +142,19 @@
 		spidev0: spidev@0 {
 			compatible = "linux,spidev";
 			reg = <0>;
-			spi-max-frequency = <8000000>;
+			spi-max-frequency = <24000000>;
 		};
 
 		spidev1: spidev@1 {
 			compatible = "linux,spidev";
 			reg = <1>;
-			spi-max-frequency = <8000000>;
+			spi-max-frequency = <24000000>;
 		};
 
 		spidev2: spidev@2 {
 			compatible = "linux,spidev";
 			reg = <2>;
-			spi-max-frequency = <8000000>;
+			spi-max-frequency = <24000000>;
 		};
 	};
 

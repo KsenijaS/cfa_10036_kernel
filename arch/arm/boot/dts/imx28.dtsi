@@ -508,6 +508,16 @@
 					fsl,pull-up = <0>;
 				};
 
+				pwm1_pins_a: pwm1@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x3110 /* MX28_PAD_PWM1__PWM_1 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
 				pwm2_pins_a: pwm2@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -542,6 +552,37 @@
 					reg = <0>;
 					fsl,pinmux-ids = <
 						0x31d0 /* MX28_PAD_PWM4__PWM_4 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+
+				pwm5_pins_a: pwm5@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x3161 /* MX28_PAD_SAIF0_BITCLK__PWM_5 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+				pwm6_pins_a: pwm6@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x3171 /* MX28_PAD_SAIF0_SDATA0__PWM_6 */
+					>;
+					fsl,drive-strength = <0>;
+					fsl,voltage = <1>;
+					fsl,pull-up = <0>;
+				};
+
+				pwm7_pins_a: pwm7@0 {
+					reg = <0>;
+					fsl,pinmux-ids = <
+						0x31a1 /* MX28_PAD_SAIF1_SDATA0__PWM_7 */
 					>;
 					fsl,drive-strength = <0>;
 					fsl,voltage = <1>;
