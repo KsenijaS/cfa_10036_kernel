@@ -63,6 +63,62 @@
 				status = "okay";
 			};
 
+			pwm0: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm0_pins_a>;
+				status = "okay";
+			};
+
+			pwm1: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm1_pins_a>;
+				status = "okay";
+			};
+
+			pwm2: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm2_pins_a>;
+				status = "okay";
+			};
+
+			pwm3: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm3_pins_a>;
+				status = "okay";
+			};
+
+			pwm4: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm4_pins_a>;
+				status = "okay";
+			};
+
+			pwm5: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm5_pins_a>;
+				status = "okay";
+			};
+
+			pwm6: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm6_pins_a>;
+				status = "okay";
+			};
+
+			pwm7: pwm@80064000 {
+				compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
+				pinctrl-names = "default";
+				pinctrl-0 = <&pwm7_pins_a>;
+				status = "okay";
+			};
+
 			auart3: serial@80070000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&auart3_2pins_a>;
@@ -88,62 +144,6 @@
 			phy-reset-duration = <100>;
 			status = "okay";
 		};
-	};
-
-	pwm0: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm0_pins_a>;
-		status = "okay";
-	};
-
-	pwm1: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm1_pins_a>;
-		status = "okay";
-	};
-
-	pwm2: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm2_pins_a>;
-		status = "okay";
-	};
-
-	pwm3: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm3_pins_a>;
-		status = "okay";
-	};
-
-	pwm4: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm4_pins_b>;
-		status = "okay";
-	};
-
-	pwm5: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm5_pins_a>;
-		status = "okay";
-	};
-
-	pwm6: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm6_pins_a>;
-		status = "okay";
-	};
-
-	pwm7: pwm@80064000 {
-		compatible = "fsl,imx28-pwm", "fsl,imx23-pwm";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwm7_pins_a>;
-		status = "okay";
 	};
 
 	spi3 {
