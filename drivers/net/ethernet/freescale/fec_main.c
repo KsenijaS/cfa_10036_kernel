@@ -511,11 +511,6 @@ fec_restart(struct net_device *ndev, int duplex)
 		netif_tx_lock_bh(ndev);
 	}
 
-	if (!fep->link)
-		netif_carrier_off(ndev);
-	else
-		netif_carrier_on(ndev);
-
 	/* Whack a reset.  We should wait for this. */
 	writel(1, fep->hwp + FEC_ECNTRL);
 	udelay(10);
