@@ -25,6 +25,7 @@
 
 #include "ci.h"
 #include "udc.h"
+#include "otg.h"
 #include "bits.h"
 #include "debug.h"
 
@@ -84,8 +85,10 @@ static int hw_device_state(struct ci13xxx *ci, u32 dma)
 		/* interrupt, error, port change, reset, sleep/suspend */
 		hw_write(ci, OP_USBINTR, ~0,
 			     USBi_UI|USBi_UEI|USBi_PCI|USBi_URI|USBi_SLI);
+		hw_write(ci, OP_USBCMD, USBCMD_RS, USBCMD_RS);
 	} else {
 		hw_write(ci, OP_USBINTR, ~0, 0);
+		hw_write(ci, OP_USBCMD, USBCMD_RS, 0);
 	}
 	return 0;
 }
@@ -583,9 +586,6 @@ static int _gadget_stop_activity(struct usb_gadget *gadget)
 	usb_ep_fifo_flush(&ci->ep0out->ep);
 	usb_ep_fifo_flush(&ci->ep0in->ep);
 
-	if (ci->driver)
-		ci->driver->disconnect(gadget);
-
 	/* make sure to disable all endpoints */
 	gadget_for_each_ep(ep, gadget) {
 		usb_ep_disable(ep);
@@ -613,6 +613,11 @@ __releases(ci->lock)
 __acquires(ci->lock)
 {
 	int retval;
+
+	if (ci->gadget.speed != USB_SPEED_UNKNOWN) {
+		if (ci->driver)
+			ci->driver->disconnect(&ci->gadget);
+	}
 
 	spin_unlock(&ci->lock);
 	retval = _gadget_stop_activity(&ci->gadget);
@@ -1340,9 +1345,6 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 	unsigned long flags;
 	int gadget_ready = 0;
 
-	if (!(ci->platdata->flags & CI13XXX_PULLUP_ON_VBUS))
-		return -EOPNOTSUPP;
-
 	spin_lock_irqsave(&ci->lock, flags);
 	ci->vbus_active = is_active;
 	if (ci->driver)
@@ -1354,13 +1356,17 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 			pm_runtime_get_sync(&_gadget->dev);
 			hw_device_reset(ci, USBMODE_CM_DC);
 			hw_device_state(ci, ci->ep0out->qh.dma);
+			dev_dbg(ci->dev, "Connected to host\n");
 		} else {
+			if (ci->driver)
+				ci->driver->disconnect(&ci->gadget);
 			hw_device_state(ci, 0);
 			if (ci->platdata->notify_event)
 				ci->platdata->notify_event(ci,
 				CI13XXX_CONTROLLER_STOPPED_EVENT);
 			_gadget_stop_activity(&ci->gadget);
 			pm_runtime_put_sync(&_gadget->dev);
+			dev_dbg(ci->dev, "Disconnected from host\n");
 		}
 	}
 
@@ -1405,9 +1411,9 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_on)
 	struct ci13xxx *ci = container_of(_gadget, struct ci13xxx, gadget);
 
 	if (is_on)
-		hw_write(ci, OP_USBCMD, USBCMD_RS, USBCMD_RS);
+		hw_device_state(ci, ci->ep0out->qh.dma);
 	else
-		hw_write(ci, OP_USBCMD, USBCMD_RS, 0);
+		hw_device_state(ci, 0);
 
 	return 0;
 }
@@ -1525,14 +1531,12 @@ static int ci13xxx_start(struct usb_gadget *gadget,
 
 	ci->driver = driver;
 	pm_runtime_get_sync(&ci->gadget.dev);
-	if (ci->platdata->flags & CI13XXX_PULLUP_ON_VBUS) {
-		if (ci->vbus_active) {
-			if (ci->platdata->flags & CI13XXX_REGS_SHARED)
-				hw_device_reset(ci, USBMODE_CM_DC);
-		} else {
-			pm_runtime_put_sync(&ci->gadget.dev);
-			goto done;
-		}
+	if (ci->vbus_active) {
+		if (ci->platdata->flags & CI13XXX_REGS_SHARED)
+			hw_device_reset(ci, USBMODE_CM_DC);
+	} else {
+		pm_runtime_put_sync(&ci->gadget.dev);
+		goto done;
 	}
 
 	retval = hw_device_state(ci, ci->ep0out->qh.dma);
@@ -1555,18 +1559,18 @@ static int ci13xxx_stop(struct usb_gadget *gadget,
 
 	spin_lock_irqsave(&ci->lock, flags);
 
-	if (!(ci->platdata->flags & CI13XXX_PULLUP_ON_VBUS) ||
-			ci->vbus_active) {
+	if (ci->vbus_active) {
 		hw_device_state(ci, 0);
 		if (ci->platdata->notify_event)
 			ci->platdata->notify_event(ci,
 			CI13XXX_CONTROLLER_STOPPED_EVENT);
-		ci->driver = NULL;
 		spin_unlock_irqrestore(&ci->lock, flags);
 		_gadget_stop_activity(&ci->gadget);
 		spin_lock_irqsave(&ci->lock, flags);
 		pm_runtime_put(&ci->gadget.dev);
 	}
+
+	ci->driver = NULL;
 
 	spin_unlock_irqrestore(&ci->lock, flags);
 
@@ -1700,7 +1704,12 @@ static int udc_start(struct ci13xxx *ci)
 	if (ci->transceiver) {
 		retval = otg_set_peripheral(ci->transceiver->otg,
 						&ci->gadget);
-		if (retval)
+		/* 
+		 * If we implement all USB functions using chipidea drivers,
+		 * it doesn't need to call above API, meanwhile, if we only
+		 * use gadget function, calling above API is useless.
+		 */
+		if (retval && retval != -ENOTSUPP)
 			goto put_transceiver;
 	}
 
@@ -1733,12 +1742,27 @@ free_qh_pool:
 	return retval;
 }
 
+static int udc_id_switch_for_device(struct ci13xxx *ci)
+{
+	ci_clear_otg_interrupt(ci, OTGSC_BSVIS);
+	ci_enable_otg_interrupt(ci, OTGSC_BSVIE);
+
+	return 0;
+}
+
+static void udc_id_switch_for_host(struct ci13xxx *ci)
+{
+	/* host doesn't care B_SESSION_VALID event */
+	ci_clear_otg_interrupt(ci, OTGSC_BSVIS);
+	ci_disable_otg_interrupt(ci, OTGSC_BSVIE);
+}
+
 /**
- * udc_remove: parent remove must call this to remove UDC
+ * ci_hdrc_gadget_destroy: parent remove must call this to remove UDC
  *
  * No interrupts active, the IRQ has been released
  */
-static void udc_stop(struct ci13xxx *ci)
+void ci_hdrc_gadget_destroy(struct ci13xxx *ci)
 {
 	if (ci == NULL)
 		return;
@@ -1755,15 +1779,13 @@ static void udc_stop(struct ci13xxx *ci)
 		if (ci->global_phy)
 			usb_put_phy(ci->transceiver);
 	}
-	/* my kobject is dynamic, I swear! */
-	memset(&ci->gadget, 0, sizeof(ci->gadget));
 }
 
 /**
  * ci_hdrc_gadget_init - initialize device related bits
  * ci: the controller
  *
- * This function enables the gadget role, if the device is "device capable".
+ * This function initializes gadget, if the device is "device capable".
  */
 int ci_hdrc_gadget_init(struct ci13xxx *ci)
 {
@@ -1776,11 +1798,11 @@ int ci_hdrc_gadget_init(struct ci13xxx *ci)
 	if (!rdrv)
 		return -ENOMEM;
 
-	rdrv->start	= udc_start;
-	rdrv->stop	= udc_stop;
+	rdrv->start	= udc_id_switch_for_device;
+	rdrv->stop	= udc_id_switch_for_host;
 	rdrv->irq	= udc_irq;
 	rdrv->name	= "gadget";
 	ci->roles[CI_ROLE_GADGET] = rdrv;
 
-	return 0;
+	return udc_start(ci);
 }
