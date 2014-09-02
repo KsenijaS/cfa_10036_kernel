@@ -17,6 +17,7 @@
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/reset.h>
 
 #define GEN_74X164_NUMBER_GPIOS	8
 
@@ -109,11 +110,21 @@ static int gen_74x164_probe(struct spi_device *spi)
 {
 	struct gen_74x164_chip *chip;
 	struct gen_74x164_chip_platform_data *pdata;
+	struct reset_control *reset;
 	int ret;
 
 	if (!spi->dev.of_node) {
 		dev_err(&spi->dev, "No device tree data available.\n");
 		return -EINVAL;
+	}
+
+	reset = devm_reset_control_get(&spi->dev, NULL);
+	if (!IS_ERR(reset)) {
+		ret = reset_control_deassert(reset);
+		if (ret < 0) {
+			dev_err(&spi->dev, "Couldn't deassert the device reset\n");
+			return ret;
+		}
 	}
 
 	/*

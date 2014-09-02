@@ -93,6 +93,10 @@
 			usbphy0: usbphy@8007c000 {
 				status = "okay";
 			};
+
+			lradc: lradc@80050000 {
+				status = "okay";
+			};
 		};
 	};
 
@@ -101,6 +105,8 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&usb0_otg_cfa10036>;
 			status = "okay";
+			dr_mode = "peripheral";
+			phy_type = "utmi";
 		};
 	};
 
@@ -113,5 +119,11 @@
 			gpios = <&gpio3 4 1>;
 			default-state = "on";
 		};
+	};
+
+	temp {
+		compatible = "fsl,mxs-internal-temp";
+		io-channels = <&lradc 8>, <&lradc 9>;
+		io-channel-names = "min", "max";
 	};
 };
