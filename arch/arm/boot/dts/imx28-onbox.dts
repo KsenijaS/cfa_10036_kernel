@@ -41,7 +41,7 @@
 						0x10e3 /* MX23_PAD_LCD_D14__GPIO_1_14 */
 					>;
 					fsl,drive-strength = <0>;
-					fsl,voltage = <1>;
+					fsl,voltage = <0>;
 					fsl,pull-up = <1>;
 				};
 
@@ -156,10 +156,9 @@
 	};
 
 	gpio_keys {
-		compatible = "gpio-keys-polled";
+		compatible = "gpio-keys";
 		pinctrl-names = "default";
 		pinctrl-0 = <&reset_btn_pins>;
-		poll-interval = <10>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
