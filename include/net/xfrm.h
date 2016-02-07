@@ -126,9 +126,7 @@ struct xfrm_state_walk {
 
 /* Full description of state of transformer. */
 struct xfrm_state {
-#ifdef CONFIG_NET_NS
-	struct net		*xs_net;
-#endif
+	possible_net_t		xs_net;
 	union {
 		struct hlist_node	gclist;
 		struct hlist_node	bydst;
@@ -170,6 +168,7 @@ struct xfrm_state {
 	struct xfrm_algo	*ealg;
 	struct xfrm_algo	*calg;
 	struct xfrm_algo_aead	*aead;
+	const char		*geniv;
 
 	/* Data for encapsulator */
 	struct xfrm_encap_tmpl	*encap;
@@ -286,16 +285,17 @@ struct xfrm_policy_afinfo {
 	unsigned short		family;
 	struct dst_ops		*dst_ops;
 	void			(*garbage_collect)(struct net *net);
-	struct dst_entry	*(*dst_lookup)(struct net *net, int tos,
+	struct dst_entry	*(*dst_lookup)(struct net *net,
+					       int tos, int oif,
 					       const xfrm_address_t *saddr,
 					       const xfrm_address_t *daddr);
-	int			(*get_saddr)(struct net *net, xfrm_address_t *saddr, xfrm_address_t *daddr);
+	int			(*get_saddr)(struct net *net, int oif,
+					     xfrm_address_t *saddr,
+					     xfrm_address_t *daddr);
 	void			(*decode_session)(struct sk_buff *skb,
 						  struct flowi *fl,
 						  int reverse);
 	int			(*get_tos)(const struct flowi *fl);
-	void			(*init_dst)(struct net *net,
-					    struct xfrm_dst *dst);
 	int			(*init_path)(struct xfrm_dst *path,
 					     struct dst_entry *dst,
 					     int nfheader_len);
@@ -333,8 +333,8 @@ struct xfrm_state_afinfo {
 						const xfrm_address_t *saddr);
 	int			(*tmpl_sort)(struct xfrm_tmpl **dst, struct xfrm_tmpl **src, int n);
 	int			(*state_sort)(struct xfrm_state **dst, struct xfrm_state **src, int n);
-	int			(*output)(struct sock *sk, struct sk_buff *skb);
-	int			(*output_finish)(struct sk_buff *skb);
+	int			(*output)(struct net *net, struct sock *sk, struct sk_buff *skb);
+	int			(*output_finish)(struct sock *sk, struct sk_buff *skb);
 	int			(*extract_input)(struct xfrm_state *x,
 						 struct sk_buff *skb);
 	int			(*extract_output)(struct xfrm_state *x,
@@ -522,9 +522,7 @@ struct xfrm_policy_queue {
 };
 
 struct xfrm_policy {
-#ifdef CONFIG_NET_NS
-	struct net		*xp_net;
-#endif
+	possible_net_t		xp_net;
 	struct hlist_node	bydst;
 	struct hlist_node	byidx;
 
@@ -550,6 +548,7 @@ struct xfrm_policy {
 	u16			family;
 	struct xfrm_sec_ctx	*security;
 	struct xfrm_tmpl       	xfrm_vec[XFRM_MAX_DEPTH];
+	struct rcu_head		rcu;
 };
 
 static inline struct net *xp_net(const struct xfrm_policy *xp)
@@ -691,13 +690,6 @@ struct xfrm_spi_skb_cb {
 
 #define XFRM_SPI_SKB_CB(__skb) ((struct xfrm_spi_skb_cb *)&((__skb)->cb[0]))
 
-/* Audit Information */
-struct xfrm_audit {
-	u32	secid;
-	kuid_t	loginuid;
-	unsigned int sessionid;
-};
-
 #ifdef CONFIG_AUDITSYSCALL
 static inline struct audit_buffer *xfrm_audit_start(const char *op)
 {
@@ -713,30 +705,24 @@ static inline struct audit_buffer *xfrm_audit_start(const char *op)
 	return audit_buf;
 }
 
-static inline void xfrm_audit_helper_usrinfo(kuid_t auid, unsigned int ses, u32 secid,
+static inline void xfrm_audit_helper_usrinfo(bool task_valid,
 					     struct audit_buffer *audit_buf)
 {
-	char *secctx;
-	u32 secctx_len;
+	const unsigned int auid = from_kuid(&init_user_ns, task_valid ?
+					    audit_get_loginuid(current) :
+					    INVALID_UID);
+	const unsigned int ses = task_valid ? audit_get_sessionid(current) :
+		(unsigned int) -1;
 
-	audit_log_format(audit_buf, " auid=%u ses=%u",
-			 from_kuid(&init_user_ns, auid), ses);
-	if (secid != 0 &&
-	    security_secid_to_secctx(secid, &secctx, &secctx_len) == 0) {
-		audit_log_format(audit_buf, " subj=%s", secctx);
-		security_release_secctx(secctx, secctx_len);
-	} else
-		audit_log_task_context(audit_buf);
+	audit_log_format(audit_buf, " auid=%u ses=%u", auid, ses);
+	audit_log_task_context(audit_buf);
 }
 
-void xfrm_audit_policy_add(struct xfrm_policy *xp, int result, kuid_t auid,
-			   unsigned int ses, u32 secid);
-void xfrm_audit_policy_delete(struct xfrm_policy *xp, int result, kuid_t auid,
-			      unsigned int ses, u32 secid);
-void xfrm_audit_state_add(struct xfrm_state *x, int result, kuid_t auid,
-			  unsigned int ses, u32 secid);
-void xfrm_audit_state_delete(struct xfrm_state *x, int result, kuid_t auid,
-			     unsigned int ses, u32 secid);
+void xfrm_audit_policy_add(struct xfrm_policy *xp, int result, bool task_valid);
+void xfrm_audit_policy_delete(struct xfrm_policy *xp, int result,
+			      bool task_valid);
+void xfrm_audit_state_add(struct xfrm_state *x, int result, bool task_valid);
+void xfrm_audit_state_delete(struct xfrm_state *x, int result, bool task_valid);
 void xfrm_audit_state_replay_overflow(struct xfrm_state *x,
 				      struct sk_buff *skb);
 void xfrm_audit_state_replay(struct xfrm_state *x, struct sk_buff *skb,
@@ -749,22 +735,22 @@ void xfrm_audit_state_icvfail(struct xfrm_state *x, struct sk_buff *skb,
 #else
 
 static inline void xfrm_audit_policy_add(struct xfrm_policy *xp, int result,
-				  kuid_t auid, unsigned int ses, u32 secid)
+					 bool task_valid)
 {
 }
 
 static inline void xfrm_audit_policy_delete(struct xfrm_policy *xp, int result,
-				  kuid_t auid, unsigned int ses, u32 secid)
+					    bool task_valid)
 {
 }
 
 static inline void xfrm_audit_state_add(struct xfrm_state *x, int result,
-				 kuid_t auid, unsigned int ses, u32 secid)
+					bool task_valid)
 {
 }
 
 static inline void xfrm_audit_state_delete(struct xfrm_state *x, int result,
-				    kuid_t auid, unsigned int ses, u32 secid)
+					   bool task_valid)
 {
 }
 
@@ -1042,7 +1028,7 @@ xfrm_addr_any(const xfrm_address_t *addr, unsigned short family)
 	case AF_INET:
 		return addr->a4 == 0;
 	case AF_INET6:
-		return ipv6_addr_any((struct in6_addr *)&addr->a6);
+		return ipv6_addr_any(&addr->in6);
 	}
 	return 0;
 }
@@ -1156,12 +1142,14 @@ static inline int xfrm6_route_forward(struct sk_buff *skb)
 	return xfrm_route_forward(skb, AF_INET6);
 }
 
-int __xfrm_sk_clone_policy(struct sock *sk);
+int __xfrm_sk_clone_policy(struct sock *sk, const struct sock *osk);
 
-static inline int xfrm_sk_clone_policy(struct sock *sk)
+static inline int xfrm_sk_clone_policy(struct sock *sk, const struct sock *osk)
 {
-	if (unlikely(sk->sk_policy[0] || sk->sk_policy[1]))
-		return __xfrm_sk_clone_policy(sk);
+	sk->sk_policy[0] = NULL;
+	sk->sk_policy[1] = NULL;
+	if (unlikely(osk->sk_policy[0] || osk->sk_policy[1]))
+		return __xfrm_sk_clone_policy(sk, osk);
 	return 0;
 }
 
@@ -1169,12 +1157,16 @@ int xfrm_policy_delete(struct xfrm_policy *pol, int dir);
 
 static inline void xfrm_sk_free_policy(struct sock *sk)
 {
-	if (unlikely(sk->sk_policy[0] != NULL)) {
-		xfrm_policy_delete(sk->sk_policy[0], XFRM_POLICY_MAX);
+	struct xfrm_policy *pol;
+
+	pol = rcu_dereference_protected(sk->sk_policy[0], 1);
+	if (unlikely(pol != NULL)) {
+		xfrm_policy_delete(pol, XFRM_POLICY_MAX);
 		sk->sk_policy[0] = NULL;
 	}
-	if (unlikely(sk->sk_policy[1] != NULL)) {
-		xfrm_policy_delete(sk->sk_policy[1], XFRM_POLICY_MAX+1);
+	pol = rcu_dereference_protected(sk->sk_policy[1], 1);
+	if (unlikely(pol != NULL)) {
+		xfrm_policy_delete(pol, XFRM_POLICY_MAX+1);
 		sk->sk_policy[1] = NULL;
 	}
 }
@@ -1184,7 +1176,7 @@ void xfrm_garbage_collect(struct net *net);
 #else
 
 static inline void xfrm_sk_free_policy(struct sock *sk) {}
-static inline int xfrm_sk_clone_policy(struct sock *sk) { return 0; }
+static inline int xfrm_sk_clone_policy(struct sock *sk, const struct sock *osk) { return 0; }
 static inline int xfrm6_route_forward(struct sk_buff *skb) { return 1; }  
 static inline int xfrm4_route_forward(struct sk_buff *skb) { return 1; } 
 static inline int xfrm6_policy_check(struct sock *sk, int dir, struct sk_buff *skb)
@@ -1255,8 +1247,8 @@ void xfrm_flowi_addr_get(const struct flowi *fl,
 		memcpy(&daddr->a4, &fl->u.ip4.daddr, sizeof(daddr->a4));
 		break;
 	case AF_INET6:
-		*(struct in6_addr *)saddr->a6 = fl->u.ip6.saddr;
-		*(struct in6_addr *)daddr->a6 = fl->u.ip6.daddr;
+		saddr->in6 = fl->u.ip6.saddr;
+		daddr->in6 = fl->u.ip6.daddr;
 		break;
 	}
 }
@@ -1331,6 +1323,7 @@ static inline int xfrm_id_proto_match(u8 proto, u8 userproto)
  * xfrm algorithm information
  */
 struct xfrm_algo_aead_info {
+	char *geniv;
 	u16 icv_truncbits;
 };
 
@@ -1340,6 +1333,7 @@ struct xfrm_algo_auth_info {
 };
 
 struct xfrm_algo_encr_info {
+	char *geniv;
 	u16 blockbits;
 	u16 defkeybits;
 };
@@ -1508,7 +1502,7 @@ struct xfrmk_spdinfo {
 
 struct xfrm_state *xfrm_find_acq_byseq(struct net *net, u32 mark, u32 seq);
 int xfrm_state_delete(struct xfrm_state *x);
-int xfrm_state_flush(struct net *net, u8 proto, struct xfrm_audit *audit_info);
+int xfrm_state_flush(struct net *net, u8 proto, bool task_valid);
 void xfrm_sad_getinfo(struct net *net, struct xfrmk_sadinfo *si);
 void xfrm_spd_getinfo(struct net *net, struct xfrmk_spdinfo *si);
 u32 xfrm_replay_seqhi(struct xfrm_state *x, __be32 net_seq);
@@ -1520,7 +1514,7 @@ int xfrm_prepare_input(struct xfrm_state *x, struct sk_buff *skb);
 int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type);
 int xfrm_input_resume(struct sk_buff *skb, int nexthdr);
 int xfrm_output_resume(struct sk_buff *skb, int err);
-int xfrm_output(struct sk_buff *skb);
+int xfrm_output(struct sock *sk, struct sk_buff *skb);
 int xfrm_inner_extract_output(struct xfrm_state *x, struct sk_buff *skb);
 void xfrm_local_error(struct sk_buff *skb, int mtu);
 int xfrm4_extract_header(struct sk_buff *skb);
@@ -1540,8 +1534,8 @@ static inline int xfrm4_rcv_spi(struct sk_buff *skb, int nexthdr, __be32 spi)
 
 int xfrm4_extract_output(struct xfrm_state *x, struct sk_buff *skb);
 int xfrm4_prepare_output(struct xfrm_state *x, struct sk_buff *skb);
-int xfrm4_output(struct sock *sk, struct sk_buff *skb);
-int xfrm4_output_finish(struct sk_buff *skb);
+int xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb);
+int xfrm4_output_finish(struct sock *sk, struct sk_buff *skb);
 int xfrm4_rcv_cb(struct sk_buff *skb, u8 protocol, int err);
 int xfrm4_protocol_register(struct xfrm4_protocol *handler, unsigned char protocol);
 int xfrm4_protocol_deregister(struct xfrm4_protocol *handler, unsigned char protocol);
@@ -1565,8 +1559,8 @@ __be32 xfrm6_tunnel_alloc_spi(struct net *net, xfrm_address_t *saddr);
 __be32 xfrm6_tunnel_spi_lookup(struct net *net, const xfrm_address_t *saddr);
 int xfrm6_extract_output(struct xfrm_state *x, struct sk_buff *skb);
 int xfrm6_prepare_output(struct xfrm_state *x, struct sk_buff *skb);
-int xfrm6_output(struct sock *sk, struct sk_buff *skb);
-int xfrm6_output_finish(struct sk_buff *skb);
+int xfrm6_output(struct net *net, struct sock *sk, struct sk_buff *skb);
+int xfrm6_output_finish(struct sock *sk, struct sk_buff *skb);
 int xfrm6_find_1stfragopt(struct xfrm_state *x, struct sk_buff *skb,
 			  u8 **prevhdr);
 
@@ -1603,7 +1597,8 @@ struct xfrm_policy *xfrm_policy_bysel_ctx(struct net *net, u32 mark,
 					  int *err);
 struct xfrm_policy *xfrm_policy_byid(struct net *net, u32 mark, u8, int dir,
 				     u32 id, int delete, int *err);
-int xfrm_policy_flush(struct net *net, u8 type, struct xfrm_audit *audit_info);
+int xfrm_policy_flush(struct net *net, u8 type, bool task_valid);
+void xfrm_policy_hash_rebuild(struct net *net);
 u32 xfrm_get_acqseq(void);
 int verify_spi_info(u8 proto, u32 min, u32 max);
 int xfrm_alloc_spi(struct xfrm_state *x, u32 minspi, u32 maxspi);

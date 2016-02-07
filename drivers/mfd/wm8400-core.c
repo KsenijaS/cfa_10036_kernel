@@ -64,7 +64,7 @@ EXPORT_SYMBOL_GPL(wm8400_block_read);
 
 static int wm8400_register_codec(struct wm8400 *wm8400)
 {
-	struct mfd_cell cell = {
+	const struct mfd_cell cell = {
 		.name = "wm8400-codec",
 		.platform_data = wm8400,
 		.pdata_size = sizeof(*wm8400),
@@ -194,7 +194,6 @@ MODULE_DEVICE_TABLE(i2c, wm8400_i2c_id);
 static struct i2c_driver wm8400_i2c_driver = {
 	.driver = {
 		.name = "WM8400",
-		.owner = THIS_MODULE,
 	},
 	.probe    = wm8400_i2c_probe,
 	.remove   = wm8400_i2c_remove,

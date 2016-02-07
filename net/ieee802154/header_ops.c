@@ -14,8 +14,9 @@
  * Phoebe Buckheister <phoebe.buckheister@itwm.fraunhofer.de>
  */
 
+#include <linux/ieee802154.h>
+
 #include <net/mac802154.h>
-#include <net/ieee802154.h>
 #include <net/ieee802154_netdev.h>
 
 static int
@@ -82,35 +83,35 @@ ieee802154_hdr_push_sechdr(u8 *buf, const struct ieee802154_sechdr *hdr)
 }
 
 int
-ieee802154_hdr_push(struct sk_buff *skb, const struct ieee802154_hdr *hdr)
+ieee802154_hdr_push(struct sk_buff *skb, struct ieee802154_hdr *hdr)
 {
-	u8 buf[MAC802154_FRAME_HARD_HEADER_LEN];
+	u8 buf[IEEE802154_MAX_HEADER_LEN];
 	int pos = 2;
 	int rc;
-	struct ieee802154_hdr_fc fc = hdr->fc;
+	struct ieee802154_hdr_fc *fc = &hdr->fc;
 
 	buf[pos++] = hdr->seq;
 
-	fc.dest_addr_mode = hdr->dest.mode;
+	fc->dest_addr_mode = hdr->dest.mode;
 
 	rc = ieee802154_hdr_push_addr(buf + pos, &hdr->dest, false);
 	if (rc < 0)
 		return -EINVAL;
 	pos += rc;
 
-	fc.source_addr_mode = hdr->source.mode;
+	fc->source_addr_mode = hdr->source.mode;
 
 	if (hdr->source.pan_id == hdr->dest.pan_id &&
 	    hdr->dest.mode != IEEE802154_ADDR_NONE)
-		fc.intra_pan = true;
+		fc->intra_pan = true;
 
-	rc = ieee802154_hdr_push_addr(buf + pos, &hdr->source, fc.intra_pan);
+	rc = ieee802154_hdr_push_addr(buf + pos, &hdr->source, fc->intra_pan);
 	if (rc < 0)
 		return -EINVAL;
 	pos += rc;
 
-	if (fc.security_enabled) {
-		fc.version = 1;
+	if (fc->security_enabled) {
+		fc->version = 1;
 
 		rc = ieee802154_hdr_push_sechdr(buf + pos, &hdr->sec);
 		if (rc < 0)
@@ -119,7 +120,7 @@ ieee802154_hdr_push(struct sk_buff *skb, const struct ieee802154_hdr *hdr)
 		pos += rc;
 	}
 
-	memcpy(buf, &fc, 2);
+	memcpy(buf, fc, 2);
 
 	memcpy(skb_push(skb, pos), buf, pos);
 
@@ -195,15 +196,16 @@ ieee802154_hdr_get_sechdr(const u8 *buf, struct ieee802154_sechdr *hdr)
 	return pos;
 }
 
+static int ieee802154_sechdr_lengths[4] = {
+	[IEEE802154_SCF_KEY_IMPLICIT] = 5,
+	[IEEE802154_SCF_KEY_INDEX] = 6,
+	[IEEE802154_SCF_KEY_SHORT_INDEX] = 10,
+	[IEEE802154_SCF_KEY_HW_INDEX] = 14,
+};
+
 static int ieee802154_hdr_sechdr_len(u8 sc)
 {
-	switch (IEEE802154_SCF_KEY_ID_MODE(sc)) {
-	case IEEE802154_SCF_KEY_IMPLICIT: return 5;
-	case IEEE802154_SCF_KEY_INDEX: return 6;
-	case IEEE802154_SCF_KEY_SHORT_INDEX: return 10;
-	case IEEE802154_SCF_KEY_HW_INDEX: return 14;
-	default: return -EINVAL;
-	}
+	return ieee802154_sechdr_lengths[IEEE802154_SCF_KEY_ID_MODE(sc)];
 }
 
 static int ieee802154_hdr_minlen(const struct ieee802154_hdr *hdr)
@@ -285,3 +287,40 @@ ieee802154_hdr_peek_addrs(const struct sk_buff *skb, struct ieee802154_hdr *hdr)
 	return pos;
 }
 EXPORT_SYMBOL_GPL(ieee802154_hdr_peek_addrs);
+
+int
+ieee802154_hdr_peek(const struct sk_buff *skb, struct ieee802154_hdr *hdr)
+{
+	const u8 *buf = skb_mac_header(skb);
+	int pos;
+
+	pos = ieee802154_hdr_peek_addrs(skb, hdr);
+	if (pos < 0)
+		return -EINVAL;
+
+	if (hdr->fc.security_enabled) {
+		u8 key_id_mode = IEEE802154_SCF_KEY_ID_MODE(*(buf + pos));
+		int want = pos + ieee802154_sechdr_lengths[key_id_mode];
+
+		if (buf + want > skb_tail_pointer(skb))
+			return -EINVAL;
+
+		pos += ieee802154_hdr_get_sechdr(buf + pos, &hdr->sec);
+	}
+
+	return pos;
+}
+EXPORT_SYMBOL_GPL(ieee802154_hdr_peek);
+
+int ieee802154_max_payload(const struct ieee802154_hdr *hdr)
+{
+	int hlen = ieee802154_hdr_minlen(hdr);
+
+	if (hdr->fc.security_enabled) {
+		hlen += ieee802154_sechdr_lengths[hdr->sec.key_id_mode] - 1;
+		hlen += ieee802154_sechdr_authtag_len(&hdr->sec);
+	}
+
+	return IEEE802154_MTU - hlen - IEEE802154_MFR_SIZE;
+}
+EXPORT_SYMBOL_GPL(ieee802154_max_payload);

@@ -6,6 +6,7 @@
 #include <linux/dmi.h>
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
+#include <asm/hpet.h>
 #include <asm/pci_x86.h>
 
 static void pci_fixup_i450nx(struct pci_dev *d)
@@ -60,19 +61,6 @@ static void pci_fixup_umc_ide(struct pci_dev *d)
 		d->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_UMC, PCI_DEVICE_ID_UMC_UM8886BF, pci_fixup_umc_ide);
-
-static void pci_fixup_ncr53c810(struct pci_dev *d)
-{
-	/*
-	 * NCR 53C810 returns class code 0 (at least on some systems).
-	 * Fix class to be PCI_CLASS_STORAGE_SCSI
-	 */
-	if (!d->class) {
-		dev_warn(&d->dev, "Fixing NCR 53C810 class code\n");
-		d->class = PCI_CLASS_STORAGE_SCSI << 8;
-	}
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_53C810, pci_fixup_ncr53c810);
 
 static void pci_fixup_latency(struct pci_dev *d)
 {
@@ -337,9 +325,7 @@ static void pci_fixup_video(struct pci_dev *pdev)
 		 * type BRIDGE, or CARDBUS. Host to PCI controllers use
 		 * PCI header type NORMAL.
 		 */
-		if (bridge
-		    && ((bridge->hdr_type == PCI_HEADER_TYPE_BRIDGE)
-		       || (bridge->hdr_type == PCI_HEADER_TYPE_CARDBUS))) {
+		if (bridge && (pci_is_bridge(bridge))) {
 			pci_read_config_word(bridge, PCI_BRIDGE_CONTROL,
 						&config);
 			if (!(config & PCI_BRIDGE_CTL_VGA))
@@ -351,8 +337,7 @@ static void pci_fixup_video(struct pci_dev *pdev)
 		pci_read_config_word(pdev, PCI_COMMAND, &config);
 		if (config & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY)) {
 			pdev->resource[PCI_ROM_RESOURCE].flags |= IORESOURCE_ROM_SHADOW;
-			dev_printk(KERN_DEBUG, &pdev->dev, "Boot video device\n");
-			vga_set_default_device(pdev);
+			dev_printk(KERN_DEBUG, &pdev->dev, "Video device with shadowed ROM\n");
 		}
 	}
 }
@@ -525,6 +510,19 @@ static void sb600_disable_hpet_bar(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_ATI, 0x4385, sb600_disable_hpet_bar);
+
+#ifdef CONFIG_HPET_TIMER
+static void sb600_hpet_quirk(struct pci_dev *dev)
+{
+	struct resource *r = &dev->resource[1];
+
+	if (r->flags & IORESOURCE_MEM && r->start == hpet_address) {
+		r->flags |= IORESOURCE_PCI_FIXED;
+		dev_info(&dev->dev, "reg 0x14 contains HPET; making it immovable\n");
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATI, 0x4385, sb600_hpet_quirk);
+#endif
 
 /*
  * Twinhead H12Y needs us to block out a region otherwise we map devices

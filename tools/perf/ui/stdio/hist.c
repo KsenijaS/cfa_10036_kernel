@@ -34,13 +34,14 @@ static size_t ipchain__fprintf_graph_line(FILE *fp, int depth, int depth_mask,
 	return ret;
 }
 
-static size_t ipchain__fprintf_graph(FILE *fp, struct callchain_list *chain,
+static size_t ipchain__fprintf_graph(FILE *fp, struct callchain_node *node,
+				     struct callchain_list *chain,
 				     int depth, int depth_mask, int period,
-				     u64 total_samples, u64 hits,
-				     int left_margin)
+				     u64 total_samples, int left_margin)
 {
 	int i;
 	size_t ret = 0;
+	char bf[1024];
 
 	ret += callchain__fprintf_left_margin(fp, left_margin);
 	for (i = 0; i < depth; i++) {
@@ -49,18 +50,14 @@ static size_t ipchain__fprintf_graph(FILE *fp, struct callchain_list *chain,
 		else
 			ret += fprintf(fp, " ");
 		if (!period && i == depth - 1) {
-			double percent;
-
-			percent = hits * 100.0 / total_samples;
-			ret += percent_color_fprintf(fp, "--%2.2f%%-- ", percent);
+			ret += fprintf(fp, "--");
+			ret += callchain_node__fprintf_value(node, fp, total_samples);
+			ret += fprintf(fp, "--");
 		} else
 			ret += fprintf(fp, "%s", "          ");
 	}
-	if (chain->ms.sym)
-		ret += fprintf(fp, "%s\n", chain->ms.sym->name);
-	else
-		ret += fprintf(fp, "0x%0" PRIx64 "\n", chain->ip);
-
+	fputs(callchain_list__sym_name(chain, bf, sizeof(bf), false), fp);
+	fputc('\n', fp);
 	return ret;
 }
 
@@ -84,13 +81,14 @@ static size_t __callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 					 int depth_mask, int left_margin)
 {
 	struct rb_node *node, *next;
-	struct callchain_node *child;
+	struct callchain_node *child = NULL;
 	struct callchain_list *chain;
 	int new_depth_mask = depth_mask;
 	u64 remaining;
 	size_t ret = 0;
 	int i;
 	uint entries_printed = 0;
+	int cumul_count = 0;
 
 	remaining = total_samples;
 
@@ -102,6 +100,7 @@ static size_t __callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 		child = rb_entry(node, struct callchain_node, rb_node);
 		cumul = callchain_cumul_hits(child);
 		remaining -= cumul;
+		cumul_count += callchain_cumul_counts(child);
 
 		/*
 		 * The depth mask manages the output of pipes that show
@@ -122,10 +121,9 @@ static size_t __callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 						   left_margin);
 		i = 0;
 		list_for_each_entry(chain, &child->val, list) {
-			ret += ipchain__fprintf_graph(fp, chain, depth,
+			ret += ipchain__fprintf_graph(fp, child, chain, depth,
 						      new_depth_mask, i++,
 						      total_samples,
-						      cumul,
 						      left_margin);
 		}
 
@@ -145,14 +143,23 @@ static size_t __callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 
 	if (callchain_param.mode == CHAIN_GRAPH_REL &&
 		remaining && remaining != total_samples) {
+		struct callchain_node rem_node = {
+			.hit = remaining,
+		};
 
 		if (!rem_sq_bracket)
 			return ret;
 
+		if (callchain_param.value == CCVAL_COUNT && child && child->parent) {
+			rem_node.count = child->parent->children_count - cumul_count;
+			if (rem_node.count <= 0)
+				return ret;
+		}
+
 		new_depth_mask &= ~(1 << (depth - 1));
-		ret += ipchain__fprintf_graph(fp, &rem_hits, depth,
+		ret += ipchain__fprintf_graph(fp, &rem_node, &rem_hits, depth,
 					      new_depth_mask, 0, total_samples,
-					      remaining, left_margin);
+					      left_margin);
 	}
 
 	return ret;
@@ -168,6 +175,7 @@ static size_t callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 	struct rb_node *node;
 	int i = 0;
 	int ret = 0;
+	char bf[1024];
 
 	/*
 	 * If have one single callchain root, don't bother printing
@@ -183,7 +191,8 @@ static size_t callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 			 * the symbol. No need to print it otherwise it appears as
 			 * displayed twice.
 			 */
-			if (!i++ && sort__first_dimension == SORT_SYM)
+			if (!i++ && field_order == NULL &&
+			    sort_order && !prefixcmp(sort_order, "sym"))
 				continue;
 			if (!printed) {
 				ret += callchain__fprintf_left_margin(fp, left_margin);
@@ -195,10 +204,8 @@ static size_t callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 			} else
 				ret += callchain__fprintf_left_margin(fp, left_margin);
 
-			if (chain->ms.sym)
-				ret += fprintf(fp, " %s\n", chain->ms.sym->name);
-			else
-				ret += fprintf(fp, " %p\n", (void *)(long)chain->ip);
+			ret += fprintf(fp, "%s\n", callchain_list__sym_name(chain, bf, sizeof(bf),
+							false));
 
 			if (++entries_printed == callchain_param.print_limit)
 				break;
@@ -218,6 +225,7 @@ static size_t __callchain__fprintf_flat(FILE *fp, struct callchain_node *node,
 {
 	struct callchain_list *chain;
 	size_t ret = 0;
+	char bf[1024];
 
 	if (!node)
 		return 0;
@@ -228,11 +236,8 @@ static size_t __callchain__fprintf_flat(FILE *fp, struct callchain_node *node,
 	list_for_each_entry(chain, &node->val, list) {
 		if (chain->ip >= PERF_CONTEXT_MAX)
 			continue;
-		if (chain->ms.sym)
-			ret += fprintf(fp, "                %s\n", chain->ms.sym->name);
-		else
-			ret += fprintf(fp, "                %p\n",
-					(void *)(long)chain->ip);
+		ret += fprintf(fp, "                %s\n", callchain_list__sym_name(chain,
+					bf, sizeof(bf), false));
 	}
 
 	return ret;
@@ -247,13 +252,63 @@ static size_t callchain__fprintf_flat(FILE *fp, struct rb_root *tree,
 	struct rb_node *rb_node = rb_first(tree);
 
 	while (rb_node) {
-		double percent;
+		chain = rb_entry(rb_node, struct callchain_node, rb_node);
+
+		ret += fprintf(fp, "           ");
+		ret += callchain_node__fprintf_value(chain, fp, total_samples);
+		ret += fprintf(fp, "\n");
+		ret += __callchain__fprintf_flat(fp, chain, total_samples);
+		ret += fprintf(fp, "\n");
+		if (++entries_printed == callchain_param.print_limit)
+			break;
+
+		rb_node = rb_next(rb_node);
+	}
+
+	return ret;
+}
+
+static size_t __callchain__fprintf_folded(FILE *fp, struct callchain_node *node)
+{
+	const char *sep = symbol_conf.field_sep ?: ";";
+	struct callchain_list *chain;
+	size_t ret = 0;
+	char bf[1024];
+	bool first;
+
+	if (!node)
+		return 0;
+
+	ret += __callchain__fprintf_folded(fp, node->parent);
+
+	first = (ret == 0);
+	list_for_each_entry(chain, &node->val, list) {
+		if (chain->ip >= PERF_CONTEXT_MAX)
+			continue;
+		ret += fprintf(fp, "%s%s", first ? "" : sep,
+			       callchain_list__sym_name(chain,
+						bf, sizeof(bf), false));
+		first = false;
+	}
+
+	return ret;
+}
+
+static size_t callchain__fprintf_folded(FILE *fp, struct rb_root *tree,
+					u64 total_samples)
+{
+	size_t ret = 0;
+	u32 entries_printed = 0;
+	struct callchain_node *chain;
+	struct rb_node *rb_node = rb_first(tree);
+
+	while (rb_node) {
 
 		chain = rb_entry(rb_node, struct callchain_node, rb_node);
-		percent = chain->hit * 100.0 / total_samples;
 
-		ret = percent_color_fprintf(fp, "           %6.2f%%\n", percent);
-		ret += __callchain__fprintf_flat(fp, chain, total_samples);
+		ret += callchain_node__fprintf_value(chain, fp, total_samples);
+		ret += fprintf(fp, " ");
+		ret += __callchain__fprintf_folded(fp, chain);
 		ret += fprintf(fp, "\n");
 		if (++entries_printed == callchain_param.print_limit)
 			break;
@@ -270,7 +325,9 @@ static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
 {
 	switch (callchain_param.mode) {
 	case CHAIN_GRAPH_REL:
-		return callchain__fprintf_graph(fp, &he->sorted_chain, he->stat.period,
+		return callchain__fprintf_graph(fp, &he->sorted_chain,
+						symbol_conf.cumulate_callchain ?
+						he->stat_acc->period : he->stat.period,
 						left_margin);
 		break;
 	case CHAIN_GRAPH_ABS:
@@ -279,6 +336,9 @@ static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
 		break;
 	case CHAIN_FLAT:
 		return callchain__fprintf_flat(fp, &he->sorted_chain, total_samples);
+		break;
+	case CHAIN_FOLDED:
+		return callchain__fprintf_folded(fp, &he->sorted_chain, total_samples);
 		break;
 	case CHAIN_NONE:
 		break;
@@ -296,18 +356,24 @@ static size_t hist_entry__callchain_fprintf(struct hist_entry *he,
 	int left_margin = 0;
 	u64 total_period = hists->stats.total_period;
 
-	if (sort__first_dimension == SORT_COMM) {
-		struct sort_entry *se = list_first_entry(&hist_entry__sort_list,
-							 typeof(*se), list);
-		left_margin = hists__col_len(hists, se->se_width_idx);
-		left_margin -= thread__comm_len(he->thread);
-	}
+	if (field_order == NULL && (sort_order == NULL ||
+				    !prefixcmp(sort_order, "comm"))) {
+		struct perf_hpp_fmt *fmt;
 
+		perf_hpp__for_each_format(fmt) {
+			if (!perf_hpp__is_sort_entry(fmt))
+				continue;
+
+			/* must be 'comm' sort entry */
+			left_margin = fmt->width(fmt, NULL, hists_to_evsel(hists));
+			left_margin -= thread__comm_len(he->thread);
+			break;
+		}
+	}
 	return hist_entry_callchain__fprintf(he, total_period, left_margin, fp);
 }
 
-static int hist_entry__period_snprintf(struct perf_hpp *hpp,
-				       struct hist_entry *he)
+static int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp)
 {
 	const char *sep = symbol_conf.field_sep;
 	struct perf_hpp_fmt *fmt;
@@ -319,6 +385,9 @@ static int hist_entry__period_snprintf(struct perf_hpp *hpp,
 		return 0;
 
 	perf_hpp__for_each_format(fmt) {
+		if (perf_hpp__should_skip(fmt, he->hists))
+			continue;
+
 		/*
 		 * If there's no field_sep, we still need
 		 * to display initial '  '.
@@ -353,8 +422,7 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 	if (size == 0 || size > bfsz)
 		size = hpp.size = bfsz;
 
-	ret = hist_entry__period_snprintf(&hpp, he);
-	hist_entry__sort_snprintf(he, bf + ret, size - ret, hists);
+	hist_entry__snprintf(he, &hpp);
 
 	ret = fprintf(fp, "%s\n", bf);
 
@@ -368,12 +436,10 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		      int max_cols, float min_pcnt, FILE *fp)
 {
 	struct perf_hpp_fmt *fmt;
-	struct sort_entry *se;
 	struct rb_node *nd;
 	size_t ret = 0;
 	unsigned int width;
 	const char *sep = symbol_conf.field_sep;
-	const char *col_width = symbol_conf.col_width_list_str;
 	int nr_rows = 0;
 	char bf[96];
 	struct perf_hpp dummy_hpp = {
@@ -386,12 +452,21 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 
 	init_rem_hits();
 
+	perf_hpp__for_each_format(fmt)
+		perf_hpp__reset_width(fmt, hists);
+
+	if (symbol_conf.col_width_list_str)
+		perf_hpp__set_user_width(symbol_conf.col_width_list_str);
+
 	if (!show_header)
 		goto print_entries;
 
 	fprintf(fp, "# ");
 
 	perf_hpp__for_each_format(fmt) {
+		if (perf_hpp__should_skip(fmt, hists))
+			continue;
+
 		if (!first)
 			fprintf(fp, "%s", sep ?: "  ");
 		else
@@ -399,28 +474,6 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 
 		fmt->header(fmt, &dummy_hpp, hists_to_evsel(hists));
 		fprintf(fp, "%s", bf);
-	}
-
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
-		if (se->elide)
-			continue;
-		if (sep) {
-			fprintf(fp, "%c%s", *sep, se->se_header);
-			continue;
-		}
-		width = strlen(se->se_header);
-		if (symbol_conf.col_width_list_str) {
-			if (col_width) {
-				hists__set_col_len(hists, se->se_width_idx,
-						   atoi(col_width));
-				col_width = strchr(col_width, ',');
-				if (col_width)
-					++col_width;
-			}
-		}
-		if (!hists__new_col_len(hists, se->se_width_idx, width))
-			width = hists__col_len(hists, se->se_width_idx);
-		fprintf(fp, "  %*s", width, se->se_header);
 	}
 
 	fprintf(fp, "\n");
@@ -437,26 +490,15 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 	perf_hpp__for_each_format(fmt) {
 		unsigned int i;
 
+		if (perf_hpp__should_skip(fmt, hists))
+			continue;
+
 		if (!first)
 			fprintf(fp, "%s", sep ?: "  ");
 		else
 			first = false;
 
 		width = fmt->width(fmt, &dummy_hpp, hists_to_evsel(hists));
-		for (i = 0; i < width; i++)
-			fprintf(fp, ".");
-	}
-
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
-		unsigned int i;
-
-		if (se->elide)
-			continue;
-
-		fprintf(fp, "  ");
-		width = hists__col_len(hists, se->se_width_idx);
-		if (width == 0)
-			width = strlen(se->se_header);
 		for (i = 0; i < width; i++)
 			fprintf(fp, ".");
 	}
@@ -480,12 +522,12 @@ print_entries:
 
 	for (nd = rb_first(&hists->entries); nd; nd = rb_next(nd)) {
 		struct hist_entry *h = rb_entry(nd, struct hist_entry, rb_node);
-		float percent = h->stat.period * 100.0 /
-					hists->stats.total_period;
+		float percent;
 
 		if (h->filtered)
 			continue;
 
+		percent = hist_entry__get_percent_limit(h);
 		if (percent < min_pcnt)
 			continue;
 
@@ -495,8 +537,8 @@ print_entries:
 			break;
 
 		if (h->ms.map == NULL && verbose > 1) {
-			__map_groups__fprintf_maps(&h->thread->mg,
-						   MAP__FUNCTION, verbose, fp);
+			__map_groups__fprintf_maps(h->thread->mg,
+						   MAP__FUNCTION, fp);
 			fprintf(fp, "%.10s end\n", graph_dotted_line);
 		}
 	}

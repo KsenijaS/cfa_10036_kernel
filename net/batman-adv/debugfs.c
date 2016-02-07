@@ -1,4 +1,4 @@
-/* Copyright (C) 2010-2014 B.A.T.M.A.N. contributors:
+/* Copyright (C) 2010-2015 B.A.T.M.A.N. contributors:
  *
  * Marek Lindner
  *
@@ -15,21 +15,42 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "debugfs.h"
 #include "main.h"
 
+#include <linux/compiler.h>
 #include <linux/debugfs.h>
+#include <linux/device.h>
+#include <linux/errno.h>
+#include <linux/export.h>
+#include <linux/fcntl.h>
+#include <linux/fs.h>
+#include <linux/jiffies.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/netdevice.h>
+#include <linux/poll.h>
+#include <linux/printk.h>
+#include <linux/sched.h> /* for linux/wait.h */
+#include <linux/seq_file.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/stat.h>
+#include <linux/stddef.h>
+#include <linux/stringify.h>
+#include <linux/sysfs.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/wait.h>
+#include <stdarg.h>
 
-#include "debugfs.h"
-#include "translation-table.h"
-#include "originator.h"
-#include "hard-interface.h"
-#include "gateway_common.h"
-#include "gateway_client.h"
-#include "soft-interface.h"
-#include "icmp_socket.h"
 #include "bridge_loop_avoidance.h"
 #include "distributed-arp-table.h"
+#include "gateway_client.h"
+#include "icmp_socket.h"
 #include "network-coding.h"
+#include "originator.h"
+#include "translation-table.h"
 
 static struct dentry *batadv_debugfs;
 
@@ -233,7 +254,6 @@ static int batadv_debug_log_setup(struct batadv_priv *bat_priv)
 
 static void batadv_debug_log_cleanup(struct batadv_priv *bat_priv)
 {
-	return;
 }
 #endif
 
@@ -242,9 +262,17 @@ static int batadv_algorithms_open(struct inode *inode, struct file *file)
 	return single_open(file, batadv_algo_seq_print_text, NULL);
 }
 
+static int neighbors_open(struct inode *inode, struct file *file)
+{
+	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
+	return single_open(file, batadv_hardif_neigh_seq_print_text, net_dev);
+}
+
 static int batadv_originators_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_orig_seq_print_text, net_dev);
 }
 
@@ -258,18 +286,21 @@ static int batadv_originators_hardif_open(struct inode *inode,
 					  struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_orig_hardif_seq_print_text, net_dev);
 }
 
 static int batadv_gateways_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_gw_client_seq_print_text, net_dev);
 }
 
 static int batadv_transtable_global_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_tt_global_seq_print_text, net_dev);
 }
 
@@ -277,6 +308,7 @@ static int batadv_transtable_global_open(struct inode *inode, struct file *file)
 static int batadv_bla_claim_table_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_bla_claim_table_seq_print_text,
 			   net_dev);
 }
@@ -285,6 +317,7 @@ static int batadv_bla_backbone_table_open(struct inode *inode,
 					  struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_bla_backbone_table_seq_print_text,
 			   net_dev);
 }
@@ -300,6 +333,7 @@ static int batadv_bla_backbone_table_open(struct inode *inode,
 static int batadv_dat_cache_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_dat_cache_seq_print_text, net_dev);
 }
 #endif
@@ -307,6 +341,7 @@ static int batadv_dat_cache_open(struct inode *inode, struct file *file)
 static int batadv_transtable_local_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_tt_local_seq_print_text, net_dev);
 }
 
@@ -319,6 +354,7 @@ struct batadv_debuginfo {
 static int batadv_nc_nodes_open(struct inode *inode, struct file *file)
 {
 	struct net_device *net_dev = (struct net_device *)inode->i_private;
+
 	return single_open(file, batadv_nc_nodes_seq_print_text, net_dev);
 }
 #endif
@@ -333,7 +369,7 @@ struct batadv_debuginfo batadv_debuginfo_##_name = {	\
 		  .llseek = seq_lseek,			\
 		  .release = single_release,		\
 		}					\
-};
+}
 
 /* the following attributes are general and therefore they will be directly
  * placed in the BATADV_DEBUGFS_SUBDIR subdirectory of debugfs
@@ -346,6 +382,7 @@ static struct batadv_debuginfo *batadv_general_debuginfos[] = {
 };
 
 /* The following attributes are per soft interface */
+static BATADV_DEBUGINFO(neighbors, S_IRUGO, neighbors_open);
 static BATADV_DEBUGINFO(originators, S_IRUGO, batadv_originators_open);
 static BATADV_DEBUGINFO(gateways, S_IRUGO, batadv_gateways_open);
 static BATADV_DEBUGINFO(transtable_global, S_IRUGO,
@@ -365,6 +402,7 @@ static BATADV_DEBUGINFO(nc_nodes, S_IRUGO, batadv_nc_nodes_open);
 #endif
 
 static struct batadv_debuginfo *batadv_mesh_debuginfos[] = {
+	&batadv_debuginfo_neighbors,
 	&batadv_debuginfo_originators,
 	&batadv_debuginfo_gateways,
 	&batadv_debuginfo_transtable_global,
@@ -395,7 +433,8 @@ struct batadv_debuginfo batadv_hardif_debuginfo_##_name = {	\
 		.llseek = seq_lseek,				\
 		.release = single_release,			\
 	},							\
-};
+}
+
 static BATADV_HARDIF_DEBUGINFO(originators, S_IRUGO,
 			       batadv_originators_hardif_open);
 
@@ -473,11 +512,7 @@ rem_attr:
 	debugfs_remove_recursive(hard_iface->debug_dir);
 	hard_iface->debug_dir = NULL;
 out:
-#ifdef CONFIG_DEBUG_FS
 	return -ENOMEM;
-#else
-	return 0;
-#endif /* CONFIG_DEBUG_FS */
 }
 
 /**
@@ -532,11 +567,7 @@ rem_attr:
 	debugfs_remove_recursive(bat_priv->debug_dir);
 	bat_priv->debug_dir = NULL;
 out:
-#ifdef CONFIG_DEBUG_FS
 	return -ENOMEM;
-#else
-	return 0;
-#endif /* CONFIG_DEBUG_FS */
 }
 
 void batadv_debugfs_del_meshif(struct net_device *dev)

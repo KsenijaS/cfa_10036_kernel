@@ -1,5 +1,5 @@
 /*
- * iosf_mbi.h: Intel OnChip System Fabric MailBox access support
+ * Intel OnChip System Fabric MailBox access support
  */
 
 #ifndef IOSF_MBI_SYMS_H
@@ -16,6 +16,18 @@
 #define MBI_MASK_LO		0x000000FF
 #define MBI_ENABLE		0xF0
 
+/* IOSF SB read/write opcodes */
+#define MBI_MMIO_READ		0x00
+#define MBI_MMIO_WRITE		0x01
+#define MBI_CFG_READ		0x04
+#define MBI_CFG_WRITE		0x05
+#define MBI_CR_READ		0x06
+#define MBI_CR_WRITE		0x07
+#define MBI_REG_READ		0x10
+#define MBI_REG_WRITE		0x11
+#define MBI_ESRAM_READ		0x12
+#define MBI_ESRAM_WRITE		0x13
+
 /* Baytrail available units */
 #define BT_MBI_UNIT_AUNIT	0x00
 #define BT_MBI_UNIT_SMC		0x01
@@ -28,27 +40,16 @@
 #define BT_MBI_UNIT_SATA	0xA3
 #define BT_MBI_UNIT_PCIE	0xA6
 
-/* Baytrail read/write opcodes */
-#define BT_MBI_AUNIT_READ	0x10
-#define BT_MBI_AUNIT_WRITE	0x11
-#define BT_MBI_SMC_READ		0x10
-#define BT_MBI_SMC_WRITE	0x11
-#define BT_MBI_CPU_READ		0x10
-#define BT_MBI_CPU_WRITE	0x11
-#define BT_MBI_BUNIT_READ	0x10
-#define BT_MBI_BUNIT_WRITE	0x11
-#define BT_MBI_PMC_READ		0x06
-#define BT_MBI_PMC_WRITE	0x07
-#define BT_MBI_GFX_READ		0x00
-#define BT_MBI_GFX_WRITE	0x01
-#define BT_MBI_SMIO_READ	0x06
-#define BT_MBI_SMIO_WRITE	0x07
-#define BT_MBI_USB_READ		0x06
-#define BT_MBI_USB_WRITE	0x07
-#define BT_MBI_SATA_READ	0x00
-#define BT_MBI_SATA_WRITE	0x01
-#define BT_MBI_PCIE_READ	0x00
-#define BT_MBI_PCIE_WRITE	0x01
+/* Quark available units */
+#define QRK_MBI_UNIT_HBA	0x00
+#define QRK_MBI_UNIT_HB		0x03
+#define QRK_MBI_UNIT_RMU	0x04
+#define QRK_MBI_UNIT_MM		0x05
+#define QRK_MBI_UNIT_SOC	0x31
+
+#if IS_ENABLED(CONFIG_IOSF_MBI)
+
+bool iosf_mbi_available(void);
 
 /**
  * iosf_mbi_read() - MailBox Interface read command
@@ -86,5 +87,34 @@ int iosf_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr);
  * Return: Nonzero on error
  */
 int iosf_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask);
+
+#else /* CONFIG_IOSF_MBI is not enabled */
+static inline
+bool iosf_mbi_available(void)
+{
+	return false;
+}
+
+static inline
+int iosf_mbi_read(u8 port, u8 opcode, u32 offset, u32 *mdr)
+{
+	WARN(1, "IOSF_MBI driver not available");
+	return -EPERM;
+}
+
+static inline
+int iosf_mbi_write(u8 port, u8 opcode, u32 offset, u32 mdr)
+{
+	WARN(1, "IOSF_MBI driver not available");
+	return -EPERM;
+}
+
+static inline
+int iosf_mbi_modify(u8 port, u8 opcode, u32 offset, u32 mdr, u32 mask)
+{
+	WARN(1, "IOSF_MBI driver not available");
+	return -EPERM;
+}
+#endif /* CONFIG_IOSF_MBI */
 
 #endif /* IOSF_MBI_SYMS_H */

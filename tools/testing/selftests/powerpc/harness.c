@@ -11,6 +11,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <elf.h>
+#include <fcntl.h>
+#include <link.h>
+#include <sys/stat.h>
 
 #include "subunit.h"
 #include "utils.h"
@@ -30,11 +34,14 @@ int run_test(int (test_function)(void), char *name)
 
 	pid = fork();
 	if (pid == 0) {
+		setpgid(0, 0);
 		exit(test_function());
 	} else if (pid == -1) {
 		perror("fork");
 		return 1;
 	}
+
+	setpgid(pid, pid);
 
 	/* Wake us up in timeout seconds */
 	alarm(TIMEOUT);
@@ -50,16 +57,19 @@ wait:
 
 		if (terminated) {
 			printf("!! force killing %s\n", name);
-			kill(pid, SIGKILL);
+			kill(-pid, SIGKILL);
 			return 1;
 		} else {
 			printf("!! killing %s\n", name);
-			kill(pid, SIGTERM);
+			kill(-pid, SIGTERM);
 			terminated = true;
 			alarm(KILL_TIMEOUT);
 			goto wait;
 		}
 	}
+
+	/* Kill anything else in the process group that is still running */
+	kill(-pid, SIGTERM);
 
 	if (WIFEXITED(status))
 		status = WEXITSTATUS(status);
@@ -99,7 +109,10 @@ int test_harness(int (test_function)(void), char *name)
 
 	rc = run_test(test_function, name);
 
-	test_finish(name, rc);
+	if (rc == MAGIC_SKIP_RETURN_VALUE)
+		test_skip(name);
+	else
+		test_finish(name, rc);
 
 	return rc;
 }

@@ -31,7 +31,7 @@
 #include <linux/platform_data/clk-realview.h>
 #include <linux/reboot.h>
 
-#include <mach/hardware.h>
+#include "hardware.h"
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 #include <asm/pgtable.h>
@@ -42,9 +42,10 @@
 #include <asm/mach/flash.h>
 #include <asm/mach/map.h>
 #include <asm/mach/time.h>
+#include <asm/outercache.h>
 
-#include <mach/board-pb11mp.h>
-#include <mach/irqs.h>
+#include "board-pb11mp.h"
+#include "irqs-pb11mp.h"
 
 #include "core.h"
 
@@ -262,7 +263,7 @@ static struct resource pmu_resources[] = {
 };
 
 static struct platform_device pmu_device = {
-	.name			= "arm-pmu",
+	.name			= "armv6-pmu",
 	.id			= -1,
 	.num_resources		= ARRAY_SIZE(pmu_resources),
 	.resource		= pmu_resources,
@@ -337,9 +338,19 @@ static void __init realview_pb11mp_init(void)
 	int i;
 
 #ifdef CONFIG_CACHE_L2X0
-	/* 1MB (128KB/way), 8-way associativity, evmon/parity/share enabled
-	 * Bits:  .... ...0 0111 1001 0000 .... .... .... */
+	/*
+	 * The PL220 needs to be manually configured as the hardware
+	 * doesn't report the correct sizes.
+	 * 1MB (128KB/way), 8-way associativity, event monitor and
+	 * parity enabled, ignore share bit, no force write allocate
+	 * Bits:  .... ...0 0111 1001 0000 .... .... ....
+	 */
 	l2x0_init(__io_address(REALVIEW_TC11MP_L220_BASE), 0x00790000, 0xfe000fff);
+	/*
+	 * due to a bug in the l220 cache controller, we must not call
+	 * the sync function. stub it out here instead!
+	 */
+	outer_cache.sync = NULL;
 #endif
 
 	realview_flash_register(realview_pb11mp_flash_resource,
@@ -347,6 +358,7 @@ static void __init realview_pb11mp_init(void)
 	realview_eth_register(NULL, realview_pb11mp_smsc911x_resources);
 	platform_device_register(&realview_i2c_device);
 	platform_device_register(&realview_cf_device);
+	platform_device_register(&realview_leds_device);
 	realview_usb_register(realview_pb11mp_isp1761_resources);
 	platform_device_register(&pmu_device);
 

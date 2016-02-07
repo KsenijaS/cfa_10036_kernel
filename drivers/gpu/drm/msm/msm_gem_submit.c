@@ -314,7 +314,6 @@ static void submit_cleanup(struct msm_gem_submit *submit, bool fail)
 	}
 
 	ww_acquire_fini(&submit->ticket);
-	kfree(submit);
 }
 
 int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
@@ -402,6 +401,7 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 		submit->cmd[i].type = submit_cmd.type;
 		submit->cmd[i].size = submit_cmd.size / 4;
 		submit->cmd[i].iova = iova + submit_cmd.submit_offset;
+		submit->cmd[i].idx  = submit_cmd.submit_idx;
 
 		if (submit->valid)
 			continue;

@@ -29,8 +29,6 @@
 #include <asm/sibyte/bcm1480_regs.h>
 #include <asm/sibyte/bcm1480_int.h>
 
-extern void smp_call_function_interrupt(void);
-
 /*
  * These are routines for dealing with the bcm1480 smp capabilities
  * independent of board/firmware
@@ -115,13 +113,6 @@ static void bcm1480_smp_finish(void)
 }
 
 /*
- * Final cleanup after all secondaries booted
- */
-static void bcm1480_cpus_done(void)
-{
-}
-
-/*
  * Setup the PC, SP, and GP of a secondary processor and start it
  * running!
  */
@@ -170,7 +161,6 @@ struct plat_smp_ops bcm1480_smp_ops = {
 	.send_ipi_mask		= bcm1480_send_ipi_mask,
 	.init_secondary		= bcm1480_init_secondary,
 	.smp_finish		= bcm1480_smp_finish,
-	.cpus_done		= bcm1480_cpus_done,
 	.boot_secondary		= bcm1480_boot_secondary,
 	.smp_setup		= bcm1480_smp_setup,
 	.prepare_cpus		= bcm1480_prepare_cpus,
@@ -192,6 +182,9 @@ void bcm1480_mailbox_interrupt(void)
 	if (action & SMP_RESCHEDULE_YOURSELF)
 		scheduler_ipi();
 
-	if (action & SMP_CALL_FUNCTION)
-		smp_call_function_interrupt();
+	if (action & SMP_CALL_FUNCTION) {
+		irq_enter();
+		generic_smp_call_function_interrupt();
+		irq_exit();
+	}
 }

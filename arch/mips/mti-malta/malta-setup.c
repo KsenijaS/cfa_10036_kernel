@@ -21,16 +21,19 @@
 #include <linux/sched.h>
 #include <linux/ioport.h>
 #include <linux/irq.h>
+#include <linux/of_fdt.h>
 #include <linux/pci.h>
 #include <linux/screen_info.h>
 #include <linux/time.h>
 
 #include <asm/fw/fw.h>
+#include <asm/mach-malta/malta-dtshim.h>
 #include <asm/mips-cm.h>
 #include <asm/mips-boards/generic.h>
 #include <asm/mips-boards/malta.h>
 #include <asm/mips-boards/maltaint.h>
 #include <asm/dma.h>
+#include <asm/prom.h>
 #include <asm/traps.h>
 #ifdef CONFIG_VT
 #include <linux/console.h>
@@ -77,11 +80,7 @@ const char *get_system_type(void)
 	return "MIPS Malta";
 }
 
-#if defined(CONFIG_MIPS_MT_SMTC)
-const char display_string[] = "	      SMTC LINUX ON MALTA	";
-#else
 const char display_string[] = "	       LINUX ON MALTA	    ";
-#endif /* CONFIG_MIPS_MT_SMTC */
 
 #ifdef CONFIG_BLK_DEV_FD
 static void __init fd_activate(void)
@@ -252,6 +251,10 @@ static void __init bonito_quirks_setup(void)
 void __init plat_mem_setup(void)
 {
 	unsigned int i;
+	void *fdt = __dtb_start;
+
+	fdt = malta_dt_shim(fdt);
+	__dt_setup_arch(fdt);
 
 	if (config_enabled(CONFIG_EVA))
 		/* EVA has already been configured in mach-malta/kernel-init.h */

@@ -7,7 +7,7 @@
 # Edit the definitions below to set the locations of the various directories,
 # as well as the test duration.
 #
-# Usage: sh kvm.sh [ options ]
+# Usage: kvm.sh [ options ]
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,36 +38,36 @@ dur=30
 dryrun=""
 KVM="`pwd`/tools/testing/selftests/rcutorture"; export KVM
 PATH=${KVM}/bin:$PATH; export PATH
-builddir="${KVM}/b1"
-RCU_INITRD="$KVM/initrd"; export RCU_INITRD
-RCU_KMAKE_ARG=""; export RCU_KMAKE_ARG
+TORTURE_DEFCONFIG=defconfig
+TORTURE_BOOT_IMAGE=""
+TORTURE_INITRD="$KVM/initrd"; export TORTURE_INITRD
+TORTURE_KMAKE_ARG=""
+TORTURE_SHUTDOWN_GRACE=180
 TORTURE_SUITE=rcu
 resdir=""
 configs=""
 cpus=0
 ds=`date +%Y.%m.%d-%H:%M:%S`
-kversion=""
 
 . functions.sh
 
 usage () {
 	echo "Usage: $scriptname optional arguments:"
 	echo "       --bootargs kernel-boot-arguments"
-	echo "       --builddir absolute-pathname"
+	echo "       --bootimage relative-path-to-kernel-boot-image"
 	echo "       --buildonly"
-	echo "       --configs \"config-file list\""
+	echo "       --configs \"config-file list w/ repeat factor (3*TINY01)\""
 	echo "       --cpus N"
 	echo "       --datestamp string"
+	echo "       --defconfig string"
 	echo "       --dryrun sched|script"
 	echo "       --duration minutes"
 	echo "       --interactive"
 	echo "       --kmake-arg kernel-make-arguments"
-	echo "       --kversion vN.NN"
 	echo "       --mac nn:nn:nn:nn:nn:nn"
 	echo "       --no-initrd"
 	echo "       --qemu-args qemu-system-..."
 	echo "       --qemu-cmd qemu-system-..."
-	echo "       --relbuilddir relative-pathname"
 	echo "       --results absolute-pathname"
 	echo "       --torture rcu"
 	exit 1
@@ -76,21 +76,20 @@ usage () {
 while test $# -gt 0
 do
 	case "$1" in
-	--bootargs)
+	--bootargs|--bootarg)
 		checkarg --bootargs "(list of kernel boot arguments)" "$#" "$2" '.*' '^--'
-		RCU_BOOTARGS="$2"
+		TORTURE_BOOTARGS="$2"
 		shift
 		;;
-	--builddir)
-		checkarg --builddir "(absolute pathname)" "$#" "$2" '^/' '^error'
-		builddir=$2
-		gotbuilddir=1
+	--bootimage)
+		checkarg --bootimage "(relative path to kernel boot image)" "$#" "$2" '[a-zA-Z0-9][a-zA-Z0-9_]*' '^--'
+		TORTURE_BOOT_IMAGE="$2"
 		shift
 		;;
 	--buildonly)
-		RCU_BUILDONLY=1; export RCU_BUILDONLY
+		TORTURE_BUILDONLY=1
 		;;
-	--configs)
+	--configs|--config)
 		checkarg --configs "(list of config files)" "$#" "$2" '^[^/]*$' '^--'
 		configs="$2"
 		shift
@@ -105,6 +104,11 @@ do
 		ds=$2
 		shift
 		;;
+	--defconfig)
+		checkarg --defconfig "defconfigtype" "$#" "$2" '^[^/][^/]*$' '^--'
+		TORTURE_DEFCONFIG=$2
+		shift
+		;;
 	--dryrun)
 		checkarg --dryrun "sched|script" $# "$2" 'sched\|script' '^--'
 		dryrun=$2
@@ -116,46 +120,39 @@ do
 		shift
 		;;
 	--interactive)
-		RCU_QEMU_INTERACTIVE=1; export RCU_QEMU_INTERACTIVE
+		TORTURE_QEMU_INTERACTIVE=1; export TORTURE_QEMU_INTERACTIVE
 		;;
 	--kmake-arg)
 		checkarg --kmake-arg "(kernel make arguments)" $# "$2" '.*' '^error$'
-		RCU_KMAKE_ARG="$2"; export RCU_KMAKE_ARG
-		shift
-		;;
-	--kversion)
-		checkarg --kversion "(kernel version)" $# "$2" '^v[0-9.]*$' '^error'
-		kversion=$2
+		TORTURE_KMAKE_ARG="$2"
 		shift
 		;;
 	--mac)
 		checkarg --mac "(MAC address)" $# "$2" '^\([0-9a-fA-F]\{2\}:\)\{5\}[0-9a-fA-F]\{2\}$' error
-		RCU_QEMU_MAC=$2; export RCU_QEMU_MAC
+		TORTURE_QEMU_MAC=$2
 		shift
 		;;
 	--no-initrd)
-		RCU_INITRD=""; export RCU_INITRD
+		TORTURE_INITRD=""; export TORTURE_INITRD
 		;;
-	--qemu-args)
+	--qemu-args|--qemu-arg)
 		checkarg --qemu-args "-qemu args" $# "$2" '^-' '^error'
-		RCU_QEMU_ARG="$2"
+		TORTURE_QEMU_ARG="$2"
 		shift
 		;;
 	--qemu-cmd)
 		checkarg --qemu-cmd "(qemu-system-...)" $# "$2" 'qemu-system-' '^--'
-		RCU_QEMU_CMD="$2"; export RCU_QEMU_CMD
-		shift
-		;;
-	--relbuilddir)
-		checkarg --relbuilddir "(relative pathname)" "$#" "$2" '^[^/]*$' '^--'
-		relbuilddir=$2
-		gotrelbuilddir=1
-		builddir=${KVM}/${relbuilddir}
+		TORTURE_QEMU_CMD="$2"
 		shift
 		;;
 	--results)
 		checkarg --results "(absolute pathname)" "$#" "$2" '^/' '^error'
 		resdir=$2
+		shift
+		;;
+	--shutdown-grace)
+		checkarg --shutdown-grace "(seconds)" "$#" "$2" '^[0-9]*$' '^error'
+		TORTURE_SHUTDOWN_GRACE=$2
 		shift
 		;;
 	--torture)
@@ -172,11 +169,10 @@ do
 done
 
 CONFIGFRAG=${KVM}/configs/${TORTURE_SUITE}; export CONFIGFRAG
-KVPATH=${CONFIGFRAG}/$kversion; export KVPATH
 
 if test -z "$configs"
 then
-	configs="`cat $CONFIGFRAG/$kversion/CFLIST`"
+	configs="`cat $CONFIGFRAG/CFLIST`"
 fi
 
 if test -z "$resdir"
@@ -184,39 +180,30 @@ then
 	resdir=$KVM/res
 fi
 
-if test "$dryrun" = ""
-then
-	if ! test -e $resdir
-	then
-		mkdir -p "$resdir" || :
-	fi
-	mkdir $resdir/$ds
-
-	# Be noisy only if running the script.
-	echo Results directory: $resdir/$ds
-	echo $scriptname $args
-
-	touch $resdir/$ds/log
-	echo $scriptname $args >> $resdir/$ds/log
-	echo ${TORTURE_SUITE} > $resdir/$ds/TORTURE_SUITE
-
-	pwd > $resdir/$ds/testid.txt
-	if test -d .git
-	then
-		git status >> $resdir/$ds/testid.txt
-		git rev-parse HEAD >> $resdir/$ds/testid.txt
-	fi
-fi
-
 # Create a file of test-name/#cpus pairs, sorted by decreasing #cpus.
 touch $T/cfgcpu
 for CF in $configs
 do
-	if test -f "$CONFIGFRAG/$kversion/$CF"
+	case $CF in
+	[0-9]\**|[0-9][0-9]\**|[0-9][0-9][0-9]\**)
+		config_reps=`echo $CF | sed -e 's/\*.*$//'`
+		CF1=`echo $CF | sed -e 's/^[^*]*\*//'`
+		;;
+	*)
+		config_reps=1
+		CF1=$CF
+		;;
+	esac
+	if test -f "$CONFIGFRAG/$CF1"
 	then
-		echo $CF `configNR_CPUS.sh $CONFIGFRAG/$kversion/$CF` >> $T/cfgcpu
+		cpu_count=`configNR_CPUS.sh $CONFIGFRAG/$CF1`
+		cpu_count=`configfrag_boot_cpus "$TORTURE_BOOTARGS" "$CONFIGFRAG/$CF1" "$cpu_count"`
+		for ((cur_rep=0;cur_rep<$config_reps;cur_rep++))
+		do
+			echo $CF1 $cpu_count >> $T/cfgcpu
+		done
 	else
-		echo "The --configs file $CF does not exist, terminating."
+		echo "The --configs file $CF1 does not exist, terminating."
 		exit 1
 	fi
 done
@@ -274,16 +261,48 @@ END {
 
 # Generate a script to execute the tests in appropriate batches.
 cat << ___EOF___ > $T/script
+CONFIGFRAG="$CONFIGFRAG"; export CONFIGFRAG
+KVM="$KVM"; export KVM
+PATH="$PATH"; export PATH
+TORTURE_BOOT_IMAGE="$TORTURE_BOOT_IMAGE"; export TORTURE_BOOT_IMAGE
+TORTURE_BUILDONLY="$TORTURE_BUILDONLY"; export TORTURE_BUILDONLY
+TORTURE_DEFCONFIG="$TORTURE_DEFCONFIG"; export TORTURE_DEFCONFIG
+TORTURE_INITRD="$TORTURE_INITRD"; export TORTURE_INITRD
+TORTURE_KMAKE_ARG="$TORTURE_KMAKE_ARG"; export TORTURE_KMAKE_ARG
+TORTURE_QEMU_CMD="$TORTURE_QEMU_CMD"; export TORTURE_QEMU_CMD
+TORTURE_QEMU_INTERACTIVE="$TORTURE_QEMU_INTERACTIVE"; export TORTURE_QEMU_INTERACTIVE
+TORTURE_QEMU_MAC="$TORTURE_QEMU_MAC"; export TORTURE_QEMU_MAC
+TORTURE_SHUTDOWN_GRACE="$TORTURE_SHUTDOWN_GRACE"; export TORTURE_SHUTDOWN_GRACE
 TORTURE_SUITE="$TORTURE_SUITE"; export TORTURE_SUITE
+if ! test -e $resdir
+then
+	mkdir -p "$resdir" || :
+fi
+mkdir $resdir/$ds
+echo Results directory: $resdir/$ds
+echo $scriptname $args
+touch $resdir/$ds/log
+echo $scriptname $args >> $resdir/$ds/log
+echo ${TORTURE_SUITE} > $resdir/$ds/TORTURE_SUITE
+pwd > $resdir/$ds/testid.txt
+if test -d .git
+then
+	git status >> $resdir/$ds/testid.txt
+	git rev-parse HEAD >> $resdir/$ds/testid.txt
+	if ! git diff HEAD > $T/git-diff 2>&1
+	then
+		cp $T/git-diff $resdir/$ds
+	fi
+fi
 ___EOF___
 awk < $T/cfgcpu.pack \
-	-v CONFIGDIR="$CONFIGFRAG/$kversion/" \
+	-v CONFIGDIR="$CONFIGFRAG/" \
 	-v KVM="$KVM" \
 	-v ncpus=$cpus \
 	-v rd=$resdir/$ds/ \
 	-v dur=$dur \
-	-v RCU_QEMU_ARG=$RCU_QEMU_ARG \
-	-v RCU_BOOTARGS=$RCU_BOOTARGS \
+	-v TORTURE_QEMU_ARG="$TORTURE_QEMU_ARG" \
+	-v TORTURE_BOOTARGS="$TORTURE_BOOTARGS" \
 'BEGIN {
 	i = 0;
 }
@@ -295,10 +314,10 @@ awk < $T/cfgcpu.pack \
 }
 
 # Dump out the scripting required to run one test batch.
-function dump(first, pastlast)
+function dump(first, pastlast, batchnum)
 {
-	print "echo ----Start batch: `date`";
-	print "echo ----Start batch: `date` >> " rd "/log";
+	print "echo ----Start batch " batchnum ": `date`";
+	print "echo ----Start batch " batchnum ": `date` >> " rd "/log";
 	jn=1
 	for (j = first; j < pastlast; j++) {
 		builddir=KVM "/b" jn
@@ -311,7 +330,7 @@ function dump(first, pastlast)
 			cfr[jn] = cf[j] "." cfrep[cf[j]];
 		}
 		if (cpusr[jn] > ncpus && ncpus != 0)
-			ovf = "(!)";
+			ovf = "-ovf";
 		else
 			ovf = "";
 		print "echo ", cfr[jn], cpusr[jn] ovf ": Starting build. `date`";
@@ -320,7 +339,7 @@ function dump(first, pastlast)
 		print "touch " builddir ".wait";
 		print "mkdir " builddir " > /dev/null 2>&1 || :";
 		print "mkdir " rd cfr[jn] " || :";
-		print "kvm-test-1-run.sh " CONFIGDIR cf[j], builddir, rd cfr[jn], dur " \"" RCU_QEMU_ARG "\" \"" RCU_BOOTARGS "\" > " rd cfr[jn]  "/kvm-test-1-run.sh.out 2>&1 &"
+		print "kvm-test-1-run.sh " CONFIGDIR cf[j], builddir, rd cfr[jn], dur " \"" TORTURE_QEMU_ARG "\" \"" TORTURE_BOOTARGS "\" > " rd cfr[jn]  "/kvm-test-1-run.sh.out 2>&1 &"
 		print "echo ", cfr[jn], cpusr[jn] ovf ": Waiting for build to complete. `date`";
 		print "echo ", cfr[jn], cpusr[jn] ovf ": Waiting for build to complete. `date` >> " rd "/log";
 		print "while test -f " builddir ".wait"
@@ -334,12 +353,18 @@ function dump(first, pastlast)
 	for (j = 1; j < jn; j++) {
 		builddir=KVM "/b" j
 		print "rm -f " builddir ".ready"
-		print "echo ----", cfr[j], cpusr[j] ovf ": Starting kernel. `date`";
-		print "echo ----", cfr[j], cpusr[j] ovf ": Starting kernel. `date` >> " rd "/log";
+		print "if test -z \"$TORTURE_BUILDONLY\""
+		print "then"
+		print "\techo ----", cfr[j], cpusr[j] ovf ": Starting kernel. `date`";
+		print "\techo ----", cfr[j], cpusr[j] ovf ": Starting kernel. `date` >> " rd "/log";
+		print "fi"
 	}
 	print "wait"
-	print "echo ---- All kernel runs complete. `date`";
-	print "echo ---- All kernel runs complete. `date` >> " rd "/log";
+	print "if test -z \"$TORTURE_BUILDONLY\""
+	print "then"
+	print "\techo ---- All kernel runs complete. `date`";
+	print "\techo ---- All kernel runs complete. `date` >> " rd "/log";
+	print "fi"
 	for (j = 1; j < jn; j++) {
 		builddir=KVM "/b" j
 		print "echo ----", cfr[j], cpusr[j] ovf ": Build/run results:";
@@ -353,60 +378,52 @@ END {
 	njobs = i;
 	nc = ncpus;
 	first = 0;
+	batchnum = 1;
 
 	# Each pass through the following loop considers one test.
 	for (i = 0; i < njobs; i++) {
 		if (ncpus == 0) {
 			# Sequential test specified, each test its own batch.
-			dump(i, i + 1);
+			dump(i, i + 1, batchnum);
 			first = i;
+			batchnum++;
 		} else if (nc < cpus[i] && i != 0) {
 			# Out of CPUs, dump out a batch.
-			dump(first, i);
+			dump(first, i, batchnum);
 			first = i;
 			nc = ncpus;
+			batchnum++;
 		}
 		# Account for the CPUs needed by the current test.
 		nc -= cpus[i];
 	}
 	# Dump the last batch.
 	if (ncpus != 0)
-		dump(first, i);
+		dump(first, i, batchnum);
 }' >> $T/script
 
-if test "$dryrun" = script
-then
-	# Dump out the script, but define the environment variables that
-	# it needs to run standalone.
-	echo CONFIGFRAG="$CONFIGFRAG; export CONFIGFRAG"
-	echo KVM="$KVM; export KVM"
-	echo KVPATH="$KVPATH; export KVPATH"
-	echo PATH="$PATH; export PATH"
-	echo RCU_BUILDONLY="$RCU_BUILDONLY; export RCU_BUILDONLY"
-	echo RCU_INITRD="$RCU_INITRD; export RCU_INITRD"
-	echo RCU_KMAKE_ARG="$RCU_KMAKE_ARG; export RCU_KMAKE_ARG"
-	echo RCU_QEMU_CMD="$RCU_QEMU_CMD; export RCU_QEMU_CMD"
-	echo RCU_QEMU_INTERACTIVE="$RCU_QEMU_INTERACTIVE; export RCU_QEMU_INTERACTIVE"
-	echo RCU_QEMU_MAC="$RCU_QEMU_MAC; export RCU_QEMU_MAC"
-	echo "mkdir -p "$resdir" || :"
-	echo "mkdir $resdir/$ds"
-	cat $T/script
-	exit 0
-elif test "$dryrun" = sched
-then
-	# Extract the test run schedule from the script.
-	egrep 'start batch|Starting build\.' $T/script |
-		sed -e 's/:.*$//' -e 's/^echo //'
-	exit 0
-else
-	# Not a dryru, so run the script.
-	sh $T/script
-fi
-
-# Tracing: trace_event=rcu:rcu_grace_period,rcu:rcu_future_grace_period,rcu:rcu_grace_period_init,rcu:rcu_nocb_wake,rcu:rcu_preempt_task,rcu:rcu_unlock_preempted_task,rcu:rcu_quiescent_state_report,rcu:rcu_fqs,rcu:rcu_callback,rcu:rcu_kfree_callback,rcu:rcu_batch_start,rcu:rcu_invoke_callback,rcu:rcu_invoke_kfree_callback,rcu:rcu_batch_end,rcu:rcu_torture_read,rcu:rcu_barrier
-
+cat << ___EOF___ >> $T/script
 echo
 echo
 echo " --- `date` Test summary:"
 echo Results directory: $resdir/$ds
 kvm-recheck.sh $resdir/$ds
+___EOF___
+
+if test "$dryrun" = script
+then
+	cat $T/script
+	exit 0
+elif test "$dryrun" = sched
+then
+	# Extract the test run schedule from the script.
+	egrep 'Start batch|Starting build\.' $T/script |
+		grep -v ">>" |
+		sed -e 's/:.*$//' -e 's/^echo //'
+	exit 0
+else
+	# Not a dryrun, so run the script.
+	sh $T/script
+fi
+
+# Tracing: trace_event=rcu:rcu_grace_period,rcu:rcu_future_grace_period,rcu:rcu_grace_period_init,rcu:rcu_nocb_wake,rcu:rcu_preempt_task,rcu:rcu_unlock_preempted_task,rcu:rcu_quiescent_state_report,rcu:rcu_fqs,rcu:rcu_callback,rcu:rcu_kfree_callback,rcu:rcu_batch_start,rcu:rcu_invoke_callback,rcu:rcu_invoke_kfree_callback,rcu:rcu_batch_end,rcu:rcu_torture_read,rcu:rcu_barrier

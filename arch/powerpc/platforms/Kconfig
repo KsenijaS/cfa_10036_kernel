@@ -19,7 +19,6 @@ source "arch/powerpc/platforms/embedded6xx/Kconfig"
 source "arch/powerpc/platforms/44x/Kconfig"
 source "arch/powerpc/platforms/40x/Kconfig"
 source "arch/powerpc/platforms/amigaone/Kconfig"
-source "arch/powerpc/platforms/wsp/Kconfig"
 
 config KVM_GUEST
 	bool "KVM Guest support"
@@ -72,11 +71,6 @@ config PPC_SMP_MUXED_IPI
 	  interrupt controller provides less than 4 interrupts to each
 	  cpu.	This will enable the generic code to multiplex the 4
 	  messages on to one ipi.
-
-config PPC_UDBG_BEAT
-	bool "BEAT based debug console"
-	depends on PPC_CELLEB
-	default n
 
 config IPIC
 	bool
@@ -278,17 +272,6 @@ config TAU_AVERAGE
 
 	  If in doubt, say N here.
 
-config QUICC_ENGINE
-	bool "Freescale QUICC Engine (QE) Support"
-	depends on FSL_SOC && PPC32
-	select PPC_LIB_RHEAP
-	select CRC32
-	help
-	  The QUICC Engine (QE) is a new generation of communications
-	  coprocessors on Freescale embedded CPUs (akin to CPM in older chips).
-	  Selecting this option means that you wish to build a kernel
-	  for a machine with a QE coprocessor.
-
 config QE_GPIO
 	bool "QE GPIO support"
 	depends on QUICC_ENGINE
@@ -301,7 +284,6 @@ config CPM2
 	bool "Enable support for the CPM2 (Communications Processor Module)"
 	depends on (FSL_SOC_BOOKE && PPC32) || 8260
 	select CPM
-	select PPC_LIB_RHEAP
 	select PPC_PCI_CHOICE
 	select ARCH_REQUIRE_GPIOLIB
 	help
@@ -331,6 +313,7 @@ config FSL_ULI1575
 
 config CPM
 	bool
+	select GENERIC_ALLOCATOR
 
 config OF_RTC
 	bool

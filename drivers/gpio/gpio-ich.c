@@ -173,6 +173,11 @@ static bool ichx_gpio_check_available(struct gpio_chip *gpio, unsigned nr)
 	return !!(ichx_priv.use_gpio & (1 << (nr / 32)));
 }
 
+static int ichx_gpio_get_direction(struct gpio_chip *gpio, unsigned nr)
+{
+	return ichx_read_bit(GPIO_IO_SEL, nr) ? GPIOF_DIR_IN : GPIOF_DIR_OUT;
+}
+
 static int ichx_gpio_direction_input(struct gpio_chip *gpio, unsigned nr)
 {
 	/*
@@ -277,7 +282,7 @@ static void ichx_gpiolib_setup(struct gpio_chip *chip)
 {
 	chip->owner = THIS_MODULE;
 	chip->label = DRV_NAME;
-	chip->dev = &ichx_priv.dev->dev;
+	chip->parent = &ichx_priv.dev->dev;
 
 	/* Allow chip-specific overrides of request()/get() */
 	chip->request = ichx_priv.desc->request ?
@@ -286,6 +291,7 @@ static void ichx_gpiolib_setup(struct gpio_chip *chip)
 		ichx_priv.desc->get : ichx_gpio_get;
 
 	chip->set = ichx_gpio_set;
+	chip->get_direction = ichx_gpio_get_direction;
 	chip->direction_input = ichx_gpio_direction_input;
 	chip->direction_output = ichx_gpio_direction_output;
 	chip->base = modparam_gpiobase;
@@ -305,6 +311,8 @@ static struct ichx_desc ich6_desc = {
 
 	.ngpio = 50,
 	.have_blink = true,
+	.regs = ichx_regs,
+	.reglen = ichx_reglen,
 };
 
 /* Intel 3100 */
@@ -324,6 +332,8 @@ static struct ichx_desc i3100_desc = {
 	.uses_gpe0 = true,
 
 	.ngpio = 50,
+	.regs = ichx_regs,
+	.reglen = ichx_reglen,
 };
 
 /* ICH7 and ICH8-based */
@@ -489,7 +499,7 @@ static int ichx_gpio_probe(struct platform_device *pdev)
 
 init:
 	ichx_gpiolib_setup(&ichx_priv.chip);
-	err = gpiochip_add(&ichx_priv.chip);
+	err = gpiochip_add_data(&ichx_priv.chip, NULL);
 	if (err) {
 		pr_err("Failed to register GPIOs\n");
 		goto add_err;
@@ -510,14 +520,7 @@ add_err:
 
 static int ichx_gpio_remove(struct platform_device *pdev)
 {
-	int err;
-
-	err = gpiochip_remove(&ichx_priv.chip);
-	if (err) {
-		dev_err(&pdev->dev, "%s failed, %d\n",
-				"gpiochip_remove()", err);
-		return err;
-	}
+	gpiochip_remove(&ichx_priv.chip);
 
 	ichx_gpio_release_regions(ichx_priv.gpio_base, ichx_priv.use_gpio);
 	if (ichx_priv.pm_base)
@@ -529,7 +532,6 @@ static int ichx_gpio_remove(struct platform_device *pdev)
 
 static struct platform_driver ichx_gpio_driver = {
 	.driver		= {
-		.owner	= THIS_MODULE,
 		.name	= DRV_NAME,
 	},
 	.probe		= ichx_gpio_probe,

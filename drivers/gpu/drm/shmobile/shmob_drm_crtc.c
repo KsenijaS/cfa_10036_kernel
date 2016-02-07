@@ -1,7 +1,7 @@
 /*
  * shmob_drm_crtc.c  --  SH Mobile DRM CRTCs
  *
- * Copyright (C) 2012 Renesas Corporation
+ * Copyright (C) 2012 Renesas Electronics Corporation
  *
  * Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -19,6 +19,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_plane_helper.h>
 
 #include <video/sh_mobile_meram.h>
 
@@ -247,7 +248,7 @@ static void shmob_drm_crtc_start(struct shmob_drm_crtc *scrtc)
 	lcdc_write(sdev, LDDDSR, value);
 
 	/* Setup planes. */
-	drm_for_each_legacy_plane(plane, &dev->mode_config.plane_list) {
+	drm_for_each_legacy_plane(plane, dev) {
 		if (plane->crtc == crtc)
 			shmob_drm_plane_setup(plane);
 	}
@@ -612,7 +613,7 @@ int shmob_drm_encoder_create(struct shmob_drm_device *sdev)
 	encoder->possible_crtcs = 1;
 
 	ret = drm_encoder_init(sdev->ddev, encoder, &encoder_funcs,
-			       DRM_MODE_ENCODER_LVDS);
+			       DRM_MODE_ENCODER_LVDS, NULL);
 	if (ret < 0)
 		return ret;
 
@@ -674,12 +675,6 @@ static int shmob_drm_connector_get_modes(struct drm_connector *connector)
 	return 1;
 }
 
-static int shmob_drm_connector_mode_valid(struct drm_connector *connector,
-					  struct drm_display_mode *mode)
-{
-	return MODE_OK;
-}
-
 static struct drm_encoder *
 shmob_drm_connector_best_encoder(struct drm_connector *connector)
 {
@@ -690,7 +685,6 @@ shmob_drm_connector_best_encoder(struct drm_connector *connector)
 
 static const struct drm_connector_helper_funcs connector_helper_funcs = {
 	.get_modes = shmob_drm_connector_get_modes,
-	.mode_valid = shmob_drm_connector_mode_valid,
 	.best_encoder = shmob_drm_connector_best_encoder,
 };
 
@@ -699,7 +693,7 @@ static void shmob_drm_connector_destroy(struct drm_connector *connector)
 	struct shmob_drm_connector *scon = to_shmob_connector(connector);
 
 	shmob_drm_backlight_exit(scon);
-	drm_sysfs_connector_remove(connector);
+	drm_connector_unregister(connector);
 	drm_connector_cleanup(connector);
 }
 
@@ -733,7 +727,7 @@ int shmob_drm_connector_create(struct shmob_drm_device *sdev,
 		return ret;
 
 	drm_connector_helper_add(connector, &connector_helper_funcs);
-	ret = drm_sysfs_connector_add(connector);
+	ret = drm_connector_register(connector);
 	if (ret < 0)
 		goto err_cleanup;
 
@@ -745,8 +739,6 @@ int shmob_drm_connector_create(struct shmob_drm_device *sdev,
 	if (ret < 0)
 		goto err_backlight;
 
-	connector->encoder = encoder;
-
 	drm_helper_connector_dpms(connector, DRM_MODE_DPMS_OFF);
 	drm_object_property_set_value(&connector->base,
 		sdev->ddev->mode_config.dpms_property, DRM_MODE_DPMS_OFF);
@@ -756,7 +748,7 @@ int shmob_drm_connector_create(struct shmob_drm_device *sdev,
 err_backlight:
 	shmob_drm_backlight_exit(&sdev->connector);
 err_sysfs:
-	drm_sysfs_connector_remove(connector);
+	drm_connector_unregister(connector);
 err_cleanup:
 	drm_connector_cleanup(connector);
 	return ret;

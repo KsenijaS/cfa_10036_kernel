@@ -32,12 +32,12 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 	case CPU_4KC:
 	case CPU_ALCHEMY:
 	case CPU_PR4450:
-	case CPU_JZRISC:
 #endif
 
 #if defined(CONFIG_SYS_HAS_CPU_MIPS32_R1) || \
     defined(CONFIG_SYS_HAS_CPU_MIPS32_R2)
 	case CPU_4KEC:
+	case CPU_JZRISC:
 #endif
 
 #ifdef CONFIG_SYS_HAS_CPU_MIPS32_R2
@@ -54,6 +54,13 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 	case CPU_M5150:
 #endif
 
+#if defined(CONFIG_SYS_HAS_CPU_MIPS32_R2) || \
+    defined(CONFIG_SYS_HAS_CPU_MIPS32_R6) || \
+    defined(CONFIG_SYS_HAS_CPU_MIPS64_R2) || \
+    defined(CONFIG_SYS_HAS_CPU_MIPS64_R6)
+	case CPU_QEMU_GENERIC:
+#endif
+
 #ifdef CONFIG_SYS_HAS_CPU_MIPS64_R1
 	case CPU_5KC:
 	case CPU_5KE:
@@ -68,6 +75,10 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 	 * All MIPS64 R2 processors have their own special symbols.  That is,
 	 * there currently is no pure R2 core
 	 */
+#endif
+
+#ifdef CONFIG_SYS_HAS_CPU_MIPS64_R6
+	case CPU_I6400:
 #endif
 
 #ifdef CONFIG_SYS_HAS_CPU_R3000
@@ -150,13 +161,11 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 	case CPU_R10000:
 	case CPU_R12000:
 	case CPU_R14000:
+	case CPU_R16000:
 #endif
 #ifdef CONFIG_SYS_HAS_CPU_RM7000
 	case CPU_RM7000:
 	case CPU_SR71000:
-#endif
-#ifdef CONFIG_SYS_HAS_CPU_RM9000
-	case CPU_RM9000:
 #endif
 #ifdef CONFIG_SYS_HAS_CPU_SB1
 	case CPU_SB1:
@@ -166,6 +175,7 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 	case CPU_CAVIUM_OCTEON:
 	case CPU_CAVIUM_OCTEON_PLUS:
 	case CPU_CAVIUM_OCTEON2:
+	case CPU_CAVIUM_OCTEON3:
 #endif
 
 #if defined(CONFIG_SYS_HAS_CPU_BMIPS32_3300) || \

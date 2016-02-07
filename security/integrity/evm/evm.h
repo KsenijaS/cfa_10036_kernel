@@ -21,10 +21,16 @@
 
 #include "../integrity.h"
 
+#define EVM_INIT_HMAC	0x0001
+#define EVM_INIT_X509	0x0002
+
 extern int evm_initialized;
 extern char *evm_hmac;
 extern char *evm_hash;
-extern int evm_hmac_version;
+
+#define EVM_ATTR_FSUUID		0x0001
+
+extern int evm_hmac_attrs;
 
 extern struct crypto_shash *hmac_tfm;
 extern struct crypto_shash *hash_tfm;

@@ -13,6 +13,10 @@
 #include "imx53.dtsi"
 
 / {
+	chosen {
+		stdout-path = &uart1;
+	};
+
 	memory {
 		reg = <0x70000000 0x20000000>,
 		      <0xb0000000 0x20000000>;
@@ -137,15 +141,14 @@
 };
 
 &ssi2 {
-	fsl,mode = "i2s-slave";
 	status = "okay";
 };
 
 &esdhc3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_esdhc3>;
-	cd-gpios = <&gpio3 11 0>;
-	wp-gpios = <&gpio3 12 0>;
+	cd-gpios = <&gpio3 11 GPIO_ACTIVE_LOW>;
+	wp-gpios = <&gpio3 12 GPIO_ACTIVE_HIGH>;
 	bus-width = <8>;
 	status = "okay";
 };
@@ -225,10 +228,11 @@
 			>;
 		};
 
+		/* open drain */
 		pinctrl_i2c1: i2c1grp {
 			fsl,pins = <
-				MX53_PAD_CSI0_DAT8__I2C1_SDA		0xc0000000
-				MX53_PAD_CSI0_DAT9__I2C1_SCL		0xc0000000
+				MX53_PAD_CSI0_DAT8__I2C1_SDA		0x400001ec
+				MX53_PAD_CSI0_DAT9__I2C1_SCL		0x400001ec
 			>;
 		};
 
@@ -272,6 +276,14 @@
 			>;
 		};
 
+		pinctrl_vga_sync: vgasync-grp {
+			fsl,pins = <
+				/* VGA_HSYNC, VSYNC with max drive strength */
+				MX53_PAD_EIM_OE__IPU_DI1_PIN7 0xe6
+				MX53_PAD_EIM_RW__IPU_DI1_PIN8 0xe6
+			>;
+		};
+
 		pinctrl_uart1: uart1grp {
 			fsl,pins = <
 				MX53_PAD_CSI0_DAT10__UART1_TXD_MUX	0x1e4
@@ -279,6 +291,16 @@
 			>;
 		};
 	};
+};
+
+&tve {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_vga_sync>;
+	ddc-i2c-bus = <&i2c2>;
+	fsl,tve-mode = "vga";
+	fsl,hsync-pin = <7>;	/* IPU DI1 PIN7 via EIM_OE */
+	fsl,vsync-pin = <8>;	/* IPU DI1 PIN8 via EIM_RW */
+	status = "okay";
 };
 
 &uart1 {

@@ -25,6 +25,203 @@
 
 __thread struct callchain_cursor callchain_cursor;
 
+int parse_callchain_record_opt(const char *arg, struct callchain_param *param)
+{
+	return parse_callchain_record(arg, param);
+}
+
+static int parse_callchain_mode(const char *value)
+{
+	if (!strncmp(value, "graph", strlen(value))) {
+		callchain_param.mode = CHAIN_GRAPH_ABS;
+		return 0;
+	}
+	if (!strncmp(value, "flat", strlen(value))) {
+		callchain_param.mode = CHAIN_FLAT;
+		return 0;
+	}
+	if (!strncmp(value, "fractal", strlen(value))) {
+		callchain_param.mode = CHAIN_GRAPH_REL;
+		return 0;
+	}
+	if (!strncmp(value, "folded", strlen(value))) {
+		callchain_param.mode = CHAIN_FOLDED;
+		return 0;
+	}
+	return -1;
+}
+
+static int parse_callchain_order(const char *value)
+{
+	if (!strncmp(value, "caller", strlen(value))) {
+		callchain_param.order = ORDER_CALLER;
+		callchain_param.order_set = true;
+		return 0;
+	}
+	if (!strncmp(value, "callee", strlen(value))) {
+		callchain_param.order = ORDER_CALLEE;
+		callchain_param.order_set = true;
+		return 0;
+	}
+	return -1;
+}
+
+static int parse_callchain_sort_key(const char *value)
+{
+	if (!strncmp(value, "function", strlen(value))) {
+		callchain_param.key = CCKEY_FUNCTION;
+		return 0;
+	}
+	if (!strncmp(value, "address", strlen(value))) {
+		callchain_param.key = CCKEY_ADDRESS;
+		return 0;
+	}
+	if (!strncmp(value, "branch", strlen(value))) {
+		callchain_param.branch_callstack = 1;
+		return 0;
+	}
+	return -1;
+}
+
+static int parse_callchain_value(const char *value)
+{
+	if (!strncmp(value, "percent", strlen(value))) {
+		callchain_param.value = CCVAL_PERCENT;
+		return 0;
+	}
+	if (!strncmp(value, "period", strlen(value))) {
+		callchain_param.value = CCVAL_PERIOD;
+		return 0;
+	}
+	if (!strncmp(value, "count", strlen(value))) {
+		callchain_param.value = CCVAL_COUNT;
+		return 0;
+	}
+	return -1;
+}
+
+static int
+__parse_callchain_report_opt(const char *arg, bool allow_record_opt)
+{
+	char *tok;
+	char *endptr;
+	bool minpcnt_set = false;
+	bool record_opt_set = false;
+	bool try_stack_size = false;
+
+	symbol_conf.use_callchain = true;
+
+	if (!arg)
+		return 0;
+
+	while ((tok = strtok((char *)arg, ",")) != NULL) {
+		if (!strncmp(tok, "none", strlen(tok))) {
+			callchain_param.mode = CHAIN_NONE;
+			symbol_conf.use_callchain = false;
+			return 0;
+		}
+
+		if (!parse_callchain_mode(tok) ||
+		    !parse_callchain_order(tok) ||
+		    !parse_callchain_sort_key(tok) ||
+		    !parse_callchain_value(tok)) {
+			/* parsing ok - move on to the next */
+			try_stack_size = false;
+			goto next;
+		} else if (allow_record_opt && !record_opt_set) {
+			if (parse_callchain_record(tok, &callchain_param))
+				goto try_numbers;
+
+			/* assume that number followed by 'dwarf' is stack size */
+			if (callchain_param.record_mode == CALLCHAIN_DWARF)
+				try_stack_size = true;
+
+			record_opt_set = true;
+			goto next;
+		}
+
+try_numbers:
+		if (try_stack_size) {
+			unsigned long size = 0;
+
+			if (get_stack_size(tok, &size) < 0)
+				return -1;
+			callchain_param.dump_size = size;
+			try_stack_size = false;
+		} else if (!minpcnt_set) {
+			/* try to get the min percent */
+			callchain_param.min_percent = strtod(tok, &endptr);
+			if (tok == endptr)
+				return -1;
+			minpcnt_set = true;
+		} else {
+			/* try print limit at last */
+			callchain_param.print_limit = strtoul(tok, &endptr, 0);
+			if (tok == endptr)
+				return -1;
+		}
+next:
+		arg = NULL;
+	}
+
+	if (callchain_register_param(&callchain_param) < 0) {
+		pr_err("Can't register callchain params\n");
+		return -1;
+	}
+	return 0;
+}
+
+int parse_callchain_report_opt(const char *arg)
+{
+	return __parse_callchain_report_opt(arg, false);
+}
+
+int parse_callchain_top_opt(const char *arg)
+{
+	return __parse_callchain_report_opt(arg, true);
+}
+
+int perf_callchain_config(const char *var, const char *value)
+{
+	char *endptr;
+
+	if (prefixcmp(var, "call-graph."))
+		return 0;
+	var += sizeof("call-graph.") - 1;
+
+	if (!strcmp(var, "record-mode"))
+		return parse_callchain_record_opt(value, &callchain_param);
+#ifdef HAVE_DWARF_UNWIND_SUPPORT
+	if (!strcmp(var, "dump-size")) {
+		unsigned long size = 0;
+		int ret;
+
+		ret = get_stack_size(value, &size);
+		callchain_param.dump_size = size;
+
+		return ret;
+	}
+#endif
+	if (!strcmp(var, "print-type"))
+		return parse_callchain_mode(value);
+	if (!strcmp(var, "order"))
+		return parse_callchain_order(value);
+	if (!strcmp(var, "sort-key"))
+		return parse_callchain_sort_key(value);
+	if (!strcmp(var, "threshold")) {
+		callchain_param.min_percent = strtod(value, &endptr);
+		if (value == endptr)
+			return -1;
+	}
+	if (!strcmp(var, "print-limit")) {
+		callchain_param.print_limit = strtod(value, &endptr);
+		if (value == endptr)
+			return -1;
+	}
+
+	return 0;
+}
+
 static void
 rb_insert_callchain(struct rb_root *root, struct callchain_node *chain,
 		    enum chain_mode mode)
@@ -43,6 +240,7 @@ rb_insert_callchain(struct rb_root *root, struct callchain_node *chain,
 
 		switch (mode) {
 		case CHAIN_FLAT:
+		case CHAIN_FOLDED:
 			if (rnode->hit < chain->hit)
 				p = &(*p)->rb_left;
 			else
@@ -92,6 +290,7 @@ static void
 sort_chain_flat(struct rb_root *rb_root, struct callchain_root *root,
 		u64 min_hit, struct callchain_param *param __maybe_unused)
 {
+	*rb_root = RB_ROOT;
 	__sort_chain_flat(rb_root, &root->node, min_hit);
 }
 
@@ -163,6 +362,7 @@ int callchain_register_param(struct callchain_param *param)
 		param->sort = sort_chain_graph_rel;
 		break;
 	case CHAIN_FLAT:
+	case CHAIN_FOLDED:
 		param->sort = sort_chain_flat;
 		break;
 	case CHAIN_NONE:
@@ -188,6 +388,7 @@ create_child(struct callchain_node *parent, bool inherit_children)
 	}
 	new->parent = parent;
 	INIT_LIST_HEAD(&new->val);
+	INIT_LIST_HEAD(&new->parent_val);
 
 	if (inherit_children) {
 		struct rb_node *n;
@@ -256,6 +457,8 @@ add_child(struct callchain_node *parent,
 
 	new->children_hit = 0;
 	new->hit = period;
+	new->children_count = 0;
+	new->count = 1;
 	return new;
 }
 
@@ -303,6 +506,9 @@ split_add_child(struct callchain_node *parent,
 	parent->children_hit = callchain_cumul_hits(new);
 	new->val_nr = parent->val_nr - idx_local;
 	parent->val_nr = idx_local;
+	new->count = parent->count;
+	new->children_count = parent->children_count;
+	parent->children_count = callchain_cumul_counts(new);
 
 	/* create a new child for the new branch if any */
 	if (idx_total < cursor->nr) {
@@ -313,6 +519,8 @@ split_add_child(struct callchain_node *parent,
 
 		parent->hit = 0;
 		parent->children_hit += period;
+		parent->count = 0;
+		parent->children_count += 1;
 
 		node = callchain_cursor_current(cursor);
 		new = add_child(parent, cursor, period);
@@ -335,6 +543,7 @@ split_add_child(struct callchain_node *parent,
 		rb_insert_color(&new->rb_node_in, &parent->rb_root_in);
 	} else {
 		parent->hit = period;
+		parent->count = 1;
 	}
 }
 
@@ -381,6 +590,7 @@ append_chain_children(struct callchain_node *root,
 
 inc_children_hit:
 	root->children_hit += period;
+	root->children_count++;
 }
 
 static int
@@ -433,6 +643,7 @@ append_chain(struct callchain_node *root,
 	/* we match 100% of the path, increment the hit */
 	if (matches == root->val_nr && cursor->pos == cursor->nr) {
 		root->hit += period;
+		root->count++;
 		return 0;
 	}
 
@@ -538,16 +749,244 @@ int sample__resolve_callchain(struct perf_sample *sample, struct symbol **parent
 	if (sample->callchain == NULL)
 		return 0;
 
-	if (symbol_conf.use_callchain || sort__has_parent) {
-		return machine__resolve_callchain(al->machine, evsel, al->thread,
-						  sample, parent, al, max_stack);
+	if (symbol_conf.use_callchain || symbol_conf.cumulate_callchain ||
+	    sort__has_parent) {
+		return thread__resolve_callchain(al->thread, evsel, sample,
+						 parent, al, max_stack);
 	}
 	return 0;
 }
 
 int hist_entry__append_callchain(struct hist_entry *he, struct perf_sample *sample)
 {
-	if (!symbol_conf.use_callchain)
+	if (!symbol_conf.use_callchain || sample->callchain == NULL)
 		return 0;
 	return callchain_append(he->callchain, &callchain_cursor, sample->period);
+}
+
+int fill_callchain_info(struct addr_location *al, struct callchain_cursor_node *node,
+			bool hide_unresolved)
+{
+	al->map = node->map;
+	al->sym = node->sym;
+	if (node->map)
+		al->addr = node->map->map_ip(node->map, node->ip);
+	else
+		al->addr = node->ip;
+
+	if (al->sym == NULL) {
+		if (hide_unresolved)
+			return 0;
+		if (al->map == NULL)
+			goto out;
+	}
+
+	if (al->map->groups == &al->machine->kmaps) {
+		if (machine__is_host(al->machine)) {
+			al->cpumode = PERF_RECORD_MISC_KERNEL;
+			al->level = 'k';
+		} else {
+			al->cpumode = PERF_RECORD_MISC_GUEST_KERNEL;
+			al->level = 'g';
+		}
+	} else {
+		if (machine__is_host(al->machine)) {
+			al->cpumode = PERF_RECORD_MISC_USER;
+			al->level = '.';
+		} else if (perf_guest) {
+			al->cpumode = PERF_RECORD_MISC_GUEST_USER;
+			al->level = 'u';
+		} else {
+			al->cpumode = PERF_RECORD_MISC_HYPERVISOR;
+			al->level = 'H';
+		}
+	}
+
+out:
+	return 1;
+}
+
+char *callchain_list__sym_name(struct callchain_list *cl,
+			       char *bf, size_t bfsize, bool show_dso)
+{
+	int printed;
+
+	if (cl->ms.sym) {
+		if (callchain_param.key == CCKEY_ADDRESS &&
+		    cl->ms.map && !cl->srcline)
+			cl->srcline = get_srcline(cl->ms.map->dso,
+						  map__rip_2objdump(cl->ms.map,
+								    cl->ip),
+						  cl->ms.sym, false);
+		if (cl->srcline)
+			printed = scnprintf(bf, bfsize, "%s %s",
+					cl->ms.sym->name, cl->srcline);
+		else
+			printed = scnprintf(bf, bfsize, "%s", cl->ms.sym->name);
+	} else
+		printed = scnprintf(bf, bfsize, "%#" PRIx64, cl->ip);
+
+	if (show_dso)
+		scnprintf(bf + printed, bfsize - printed, " %s",
+			  cl->ms.map ?
+			  cl->ms.map->dso->short_name :
+			  "unknown");
+
+	return bf;
+}
+
+char *callchain_node__scnprintf_value(struct callchain_node *node,
+				      char *bf, size_t bfsize, u64 total)
+{
+	double percent = 0.0;
+	u64 period = callchain_cumul_hits(node);
+	unsigned count = callchain_cumul_counts(node);
+
+	if (callchain_param.mode == CHAIN_FOLDED) {
+		period = node->hit;
+		count = node->count;
+	}
+
+	switch (callchain_param.value) {
+	case CCVAL_PERIOD:
+		scnprintf(bf, bfsize, "%"PRIu64, period);
+		break;
+	case CCVAL_COUNT:
+		scnprintf(bf, bfsize, "%u", count);
+		break;
+	case CCVAL_PERCENT:
+	default:
+		if (total)
+			percent = period * 100.0 / total;
+		scnprintf(bf, bfsize, "%.2f%%", percent);
+		break;
+	}
+	return bf;
+}
+
+int callchain_node__fprintf_value(struct callchain_node *node,
+				 FILE *fp, u64 total)
+{
+	double percent = 0.0;
+	u64 period = callchain_cumul_hits(node);
+	unsigned count = callchain_cumul_counts(node);
+
+	if (callchain_param.mode == CHAIN_FOLDED) {
+		period = node->hit;
+		count = node->count;
+	}
+
+	switch (callchain_param.value) {
+	case CCVAL_PERIOD:
+		return fprintf(fp, "%"PRIu64, period);
+	case CCVAL_COUNT:
+		return fprintf(fp, "%u", count);
+	case CCVAL_PERCENT:
+	default:
+		if (total)
+			percent = period * 100.0 / total;
+		return percent_color_fprintf(fp, "%.2f%%", percent);
+	}
+	return 0;
+}
+
+static void free_callchain_node(struct callchain_node *node)
+{
+	struct callchain_list *list, *tmp;
+	struct callchain_node *child;
+	struct rb_node *n;
+
+	list_for_each_entry_safe(list, tmp, &node->parent_val, list) {
+		list_del(&list->list);
+		free(list);
+	}
+
+	list_for_each_entry_safe(list, tmp, &node->val, list) {
+		list_del(&list->list);
+		free(list);
+	}
+
+	n = rb_first(&node->rb_root_in);
+	while (n) {
+		child = container_of(n, struct callchain_node, rb_node_in);
+		n = rb_next(n);
+		rb_erase(&child->rb_node_in, &node->rb_root_in);
+
+		free_callchain_node(child);
+		free(child);
+	}
+}
+
+void free_callchain(struct callchain_root *root)
+{
+	if (!symbol_conf.use_callchain)
+		return;
+
+	free_callchain_node(&root->node);
+}
+
+static u64 decay_callchain_node(struct callchain_node *node)
+{
+	struct callchain_node *child;
+	struct rb_node *n;
+	u64 child_hits = 0;
+
+	n = rb_first(&node->rb_root_in);
+	while (n) {
+		child = container_of(n, struct callchain_node, rb_node_in);
+
+		child_hits += decay_callchain_node(child);
+		n = rb_next(n);
+	}
+
+	node->hit = (node->hit * 7) / 8;
+	node->children_hit = child_hits;
+
+	return node->hit;
+}
+
+void decay_callchain(struct callchain_root *root)
+{
+	if (!symbol_conf.use_callchain)
+		return;
+
+	decay_callchain_node(&root->node);
+}
+
+int callchain_node__make_parent_list(struct callchain_node *node)
+{
+	struct callchain_node *parent = node->parent;
+	struct callchain_list *chain, *new;
+	LIST_HEAD(head);
+
+	while (parent) {
+		list_for_each_entry_reverse(chain, &parent->val, list) {
+			new = malloc(sizeof(*new));
+			if (new == NULL)
+				goto out;
+			*new = *chain;
+			new->has_children = false;
+			list_add_tail(&new->list, &head);
+		}
+		parent = parent->parent;
+	}
+
+	list_for_each_entry_safe_reverse(chain, new, &head, list)
+		list_move_tail(&chain->list, &node->parent_val);
+
+	if (!list_empty(&node->parent_val)) {
+		chain = list_first_entry(&node->parent_val, struct callchain_list, list);
+		chain->has_children = rb_prev(&node->rb_node) || rb_next(&node->rb_node);
+
+		chain = list_first_entry(&node->val, struct callchain_list, list);
+		chain->has_children = false;
+	}
+	return 0;
+
+out:
+	list_for_each_entry_safe(chain, new, &head, list) {
+		list_del(&chain->list);
+		free(chain);
+	}
+	return -ENOMEM;
 }

@@ -29,21 +29,24 @@
 
 struct idr_layer {
 	int			prefix;	/* the ID prefix of this idr_layer */
-	DECLARE_BITMAP(bitmap, IDR_SIZE); /* A zero bit means "space here" */
+	int			layer;	/* distance from leaf */
 	struct idr_layer __rcu	*ary[1<<IDR_BITS];
 	int			count;	/* When zero, we can release it */
-	int			layer;	/* distance from leaf */
-	struct rcu_head		rcu_head;
+	union {
+		/* A zero bit means "space here" */
+		DECLARE_BITMAP(bitmap, IDR_SIZE);
+		struct rcu_head		rcu_head;
+	};
 };
 
 struct idr {
 	struct idr_layer __rcu	*hint;	/* the last layer allocated from */
 	struct idr_layer __rcu	*top;
-	struct idr_layer	*id_free;
 	int			layers;	/* only valid w/o concurrent changes */
-	int			id_free_cnt;
 	int			cur;	/* current pos for cyclic allocation */
 	spinlock_t		lock;
+	int			id_free_cnt;
+	struct idr_layer	*id_free;
 };
 
 #define IDR_INIT(name)							\
@@ -131,6 +134,20 @@ static inline void *idr_find(struct idr *idr, int id)
  */
 #define idr_for_each_entry(idp, entry, id)			\
 	for (id = 0; ((entry) = idr_get_next(idp, &(id))) != NULL; ++id)
+
+/**
+ * idr_for_each_entry - continue iteration over an idr's elements of a given type
+ * @idp:     idr handle
+ * @entry:   the type * to use as cursor
+ * @id:      id entry's key
+ *
+ * Continue to iterate over list of given type, continuing after
+ * the current position.
+ */
+#define idr_for_each_entry_continue(idp, entry, id)			\
+	for ((entry) = idr_get_next((idp), &(id));			\
+	     entry;							\
+	     ++id, (entry) = idr_get_next((idp), &(id)))
 
 /*
  * IDA - IDR based id allocator, use when translation from id to

@@ -17,6 +17,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
+#define _GNU_SOURCE
+#define __SANE_USERSPACE_TYPES__        /* For PPC64, to get LL64 types */
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -46,12 +48,14 @@
 #define CLOCK_INVALID -1
 #endif
 
-/* When glibc offers the syscall, this will go away. */
+/* clock_adjtime is not available in GLIBC < 2.14 */
+#if !__GLIBC_PREREQ(2, 14)
 #include <sys/syscall.h>
 static int clock_adjtime(clockid_t id, struct timex *tx)
 {
 	return syscall(__NR_clock_adjtime, id, tx);
 }
+#endif
 
 static clockid_t get_clockid(int fd)
 {
@@ -497,11 +501,11 @@ int main(int argc, char *argv[])
 			interval = t2 - t1;
 			offset = (t2 + t1) / 2 - tp;
 
-			printf("system time: %" PRId64 ".%u\n",
+			printf("system time: %lld.%u\n",
 				(pct+2*i)->sec, (pct+2*i)->nsec);
-			printf("phc    time: %" PRId64 ".%u\n",
+			printf("phc    time: %lld.%u\n",
 				(pct+2*i+1)->sec, (pct+2*i+1)->nsec);
-			printf("system time: %" PRId64 ".%u\n",
+			printf("system time: %lld.%u\n",
 				(pct+2*i+2)->sec, (pct+2*i+2)->nsec);
 			printf("system/phc clock time offset is %" PRId64 " ns\n"
 			       "system     clock time delay  is %" PRId64 " ns\n",

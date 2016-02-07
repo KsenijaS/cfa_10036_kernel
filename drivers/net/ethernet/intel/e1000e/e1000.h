@@ -1,5 +1,5 @@
 /* Intel PRO/1000 Linux driver
- * Copyright(c) 1999 - 2014 Intel Corporation.
+ * Copyright(c) 1999 - 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -34,12 +34,13 @@
 #include <linux/pci-aspm.h>
 #include <linux/crc32.h>
 #include <linux/if_vlan.h>
-#include <linux/clocksource.h>
+#include <linux/timecounter.h>
 #include <linux/net_tstamp.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/ptp_classify.h>
 #include <linux/mii.h>
 #include <linux/mdio.h>
+#include <linux/pm_qos.h>
 #include "hw.h"
 
 struct e1000_info;
@@ -97,6 +98,8 @@ struct e1000_info;
 #define DEFAULT_RADV			8
 #define BURST_RDTR			0x20
 #define BURST_RADV			0x20
+#define PCICFG_DESC_RING_STATUS		0xe4
+#define FLUSH_DESC_REQUIRED		0x100
 
 /* in the case of WTHRESH, it appears at least the 82571/2 hardware
  * writes back 4 descriptors when WTHRESH=5, and 3 descriptors when
@@ -132,6 +135,7 @@ enum e1000_boards {
 	board_pchlan,
 	board_pch2lan,
 	board_pch_lpt,
+	board_pch_spt
 };
 
 struct e1000_ps_page {
@@ -265,10 +269,10 @@ struct e1000_adapter {
 	u32 tx_hwtstamp_timeouts;
 
 	/* Rx */
-	bool (*clean_rx) (struct e1000_ring *ring, int *work_done,
-			  int work_to_do) ____cacheline_aligned_in_smp;
-	void (*alloc_rx_buf) (struct e1000_ring *ring, int cleaned_count,
-			      gfp_t gfp);
+	bool (*clean_rx)(struct e1000_ring *ring, int *work_done,
+			 int work_to_do) ____cacheline_aligned_in_smp;
+	void (*alloc_rx_buf)(struct e1000_ring *ring, int cleaned_count,
+			     gfp_t gfp);
 	struct e1000_ring *rx_ring;
 
 	u32 rx_int_delay;
@@ -342,6 +346,7 @@ struct e1000_adapter {
 	struct timecounter tc;
 	struct ptp_clock *ptp_clock;
 	struct ptp_clock_info ptp_clock_info;
+	struct pm_qos_request pm_qos_req;
 
 	u16 eee_advert;
 };
@@ -381,6 +386,10 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca);
 #define INCVALUE_SHIFT_25MHz	18
 #define INCPERIOD_25MHz		1
 
+#define INCVALUE_24MHz		125
+#define INCVALUE_SHIFT_24MHz	14
+#define INCPERIOD_24MHz		3
+
 /* Another drawback of scaling the incvalue by a large factor is the
  * 64-bit SYSTIM register overflows more quickly.  This is dealt with
  * by simply reading the clock before it overflows.
@@ -391,6 +400,8 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca);
  * 25MHz	46-bit	2^46 / 10^9 / 3600 = 19.55 hours
  */
 #define E1000_SYSTIM_OVERFLOW_PERIOD	(HZ * 60 * 60 * 4)
+#define E1000_MAX_82574_SYSTIM_REREADS	50
+#define E1000_82574_SYSTIM_EPSILON	(1ULL << 35ULL)
 
 /* hardware capability, feature, and workaround flags */
 #define FLAG_HAS_AMT                      (1 << 0)
@@ -469,7 +480,7 @@ extern const char e1000e_driver_version[];
 void e1000e_check_options(struct e1000_adapter *adapter);
 void e1000e_set_ethtool_ops(struct net_device *netdev);
 
-int e1000e_up(struct e1000_adapter *adapter);
+void e1000e_up(struct e1000_adapter *adapter);
 void e1000e_down(struct e1000_adapter *adapter, bool reset);
 void e1000e_reinit_locked(struct e1000_adapter *adapter);
 void e1000e_reset(struct e1000_adapter *adapter);
@@ -499,6 +510,7 @@ extern const struct e1000_info e1000_ich10_info;
 extern const struct e1000_info e1000_pch_info;
 extern const struct e1000_info e1000_pch2_info;
 extern const struct e1000_info e1000_pch_lpt_info;
+extern const struct e1000_info e1000_pch_spt_info;
 extern const struct e1000_info e1000_es2_info;
 
 void e1000e_ptp_init(struct e1000_adapter *adapter);
@@ -573,35 +585,8 @@ static inline u32 __er32(struct e1000_hw *hw, unsigned long reg)
 
 #define er32(reg)	__er32(hw, E1000_##reg)
 
-/**
- * __ew32_prepare - prepare to write to MAC CSR register on certain parts
- * @hw: pointer to the HW structure
- *
- * When updating the MAC CSR registers, the Manageability Engine (ME) could
- * be accessing the registers at the same time.  Normally, this is handled in
- * h/w by an arbiter but on some parts there is a bug that acknowledges Host
- * accesses later than it should which could result in the register to have
- * an incorrect value.  Workaround this by checking the FWSM register which
- * has bit 24 set while ME is accessing MAC CSR registers, wait if it is set
- * and try again a number of times.
- **/
-static inline s32 __ew32_prepare(struct e1000_hw *hw)
-{
-	s32 i = E1000_ICH_FWSM_PCIM2PCI_COUNT;
-
-	while ((er32(FWSM) & E1000_ICH_FWSM_PCIM2PCI) && --i)
-		udelay(50);
-
-	return i;
-}
-
-static inline void __ew32(struct e1000_hw *hw, unsigned long reg, u32 val)
-{
-	if (hw->adapter->flags2 & FLAG2_PCIM2PCI_ARBITER_WA)
-		__ew32_prepare(hw);
-
-	writel(val, hw->hw_addr + reg);
-}
+s32 __ew32_prepare(struct e1000_hw *hw);
+void __ew32(struct e1000_hw *hw, unsigned long reg, u32 val);
 
 #define ew32(reg, val)	__ew32(hw, E1000_##reg, (val))
 

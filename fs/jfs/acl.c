@@ -40,10 +40,10 @@ struct posix_acl *jfs_get_acl(struct inode *inode, int type)
 
 	switch(type) {
 		case ACL_TYPE_ACCESS:
-			ea_name = POSIX_ACL_XATTR_ACCESS;
+			ea_name = XATTR_NAME_POSIX_ACL_ACCESS;
 			break;
 		case ACL_TYPE_DEFAULT:
-			ea_name = POSIX_ACL_XATTR_DEFAULT;
+			ea_name = XATTR_NAME_POSIX_ACL_DEFAULT;
 			break;
 		default:
 			return ERR_PTR(-EINVAL);
@@ -82,17 +82,19 @@ static int __jfs_set_acl(tid_t tid, struct inode *inode, int type,
 
 	switch (type) {
 	case ACL_TYPE_ACCESS:
-		ea_name = POSIX_ACL_XATTR_ACCESS;
-		rc = posix_acl_equiv_mode(acl, &inode->i_mode);
-		if (rc < 0)
-			return rc;
-		inode->i_ctime = CURRENT_TIME;
-		mark_inode_dirty(inode);
-		if (rc == 0)
-			acl = NULL;
+		ea_name = XATTR_NAME_POSIX_ACL_ACCESS;
+		if (acl) {
+			rc = posix_acl_equiv_mode(acl, &inode->i_mode);
+			if (rc < 0)
+				return rc;
+			inode->i_ctime = CURRENT_TIME;
+			mark_inode_dirty(inode);
+			if (rc == 0)
+				acl = NULL;
+		}
 		break;
 	case ACL_TYPE_DEFAULT:
-		ea_name = POSIX_ACL_XATTR_DEFAULT;
+		ea_name = XATTR_NAME_POSIX_ACL_DEFAULT;
 		break;
 	default:
 		return -EINVAL;

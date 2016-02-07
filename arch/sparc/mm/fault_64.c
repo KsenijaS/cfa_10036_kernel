@@ -22,16 +22,17 @@
 #include <linux/kdebug.h>
 #include <linux/percpu.h>
 #include <linux/context_tracking.h>
+#include <linux/uaccess.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
-#include <asm/uaccess.h>
 #include <asm/asi.h>
 #include <asm/lsu.h>
 #include <asm/sections.h>
 #include <asm/mmu_context.h>
+#include <asm/setup.h>
 
 int show_unhandled_signals = 1;
 
@@ -112,9 +113,6 @@ static unsigned int get_user_insn(unsigned long tpc)
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	if (pmd_trans_huge(*pmdp)) {
-		if (pmd_trans_splitting(*pmdp))
-			goto out_irq_enable;
-
 		pa  = pmd_pfn(*pmdp) << PAGE_SHIFT;
 		pa += tpc & ~HPAGE_MASK;
 
@@ -195,9 +193,6 @@ static void do_fault_siginfo(int code, int sig, struct pt_regs *regs,
 
 	force_sig_info(sig, &info, current);
 }
-
-extern int handle_ldf_stq(u32, struct pt_regs *);
-extern int handle_ld_nf(u32, struct pt_regs *);
 
 static unsigned int get_fault_insn(struct pt_regs *regs, unsigned int insn)
 {
@@ -281,18 +276,6 @@ static void noinline __kprobes bogus_32bit_fault_tpc(struct pt_regs *regs)
 	show_regs(regs);
 }
 
-static void noinline __kprobes bogus_32bit_fault_address(struct pt_regs *regs,
-							 unsigned long addr)
-{
-	static int times;
-
-	if (times++ < 10)
-		printk(KERN_ERR "FAULT[%s:%d]: 32-bit process "
-		       "reports 64-bit fault address [%lx]\n",
-		       current->comm, current->pid, addr);
-	show_regs(regs);
-}
-
 asmlinkage void __kprobes do_sparc64_fault(struct pt_regs *regs)
 {
 	enum ctx_state prev_state = exception_enter();
@@ -322,10 +305,8 @@ asmlinkage void __kprobes do_sparc64_fault(struct pt_regs *regs)
 				goto intr_or_no_mm;
 			}
 		}
-		if (unlikely((address >> 32) != 0)) {
-			bogus_32bit_fault_address(regs, address);
+		if (unlikely((address >> 32) != 0))
 			goto intr_or_no_mm;
-		}
 	}
 
 	if (regs->tstate & TSTATE_PRIV) {
@@ -346,7 +327,7 @@ asmlinkage void __kprobes do_sparc64_fault(struct pt_regs *regs)
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_atomic() || !mm)
+	if (faulthandler_disabled() || !mm)
 		goto intr_or_no_mm;
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
@@ -361,6 +342,9 @@ asmlinkage void __kprobes do_sparc64_fault(struct pt_regs *regs)
 retry:
 		down_read(&mm->mmap_sem);
 	}
+
+	if (fault_code & FAULT_CODE_BAD_RA)
+		goto do_sigbus;
 
 	vma = find_vma(mm, address);
 	if (!vma)
@@ -426,8 +410,9 @@ good_area:
 	 * that here.
 	 */
 	if ((fault_code & FAULT_CODE_ITLB) && !(vma->vm_flags & VM_EXEC)) {
-		BUG_ON(address != regs->tpc);
-		BUG_ON(regs->tstate & TSTATE_PRIV);
+		WARN(address != regs->tpc,
+		     "address (%lx) != regs->tpc (%lx)\n", address, regs->tpc);
+		WARN_ON(regs->tstate & TSTATE_PRIV);
 		goto bad_area;
 	}
 
@@ -459,6 +444,8 @@ good_area:
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;
+		else if (fault & VM_FAULT_SIGSEGV)
+			goto bad_area;
 		else if (fault & VM_FAULT_SIGBUS)
 			goto do_sigbus;
 		BUG();

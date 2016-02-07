@@ -24,26 +24,54 @@
 #ifndef DRM_PLANE_HELPER_H
 #define DRM_PLANE_HELPER_H
 
-/**
- * DOC: plane helpers
+#include <drm/drm_rect.h>
+#include <drm/drm_crtc.h>
+#include <drm/drm_modeset_helper_vtables.h>
+
+/*
+ * Drivers that don't allow primary plane scaling may pass this macro in place
+ * of the min/max scale parameters of the update checker function.
  *
- * Helper functions to assist with creation and handling of CRTC primary
- * planes.
+ * Due to src being in 16.16 fixed point and dest being in integer pixels,
+ * 1<<16 represents no scaling.
  */
+#define DRM_PLANE_HELPER_NO_SCALING (1<<16)
 
-extern int drm_primary_helper_update(struct drm_plane *plane,
-				     struct drm_crtc *crtc,
-				     struct drm_framebuffer *fb,
-				     int crtc_x, int crtc_y,
-				     unsigned int crtc_w, unsigned int crtc_h,
-				     uint32_t src_x, uint32_t src_y,
-				     uint32_t src_w, uint32_t src_h);
-extern int drm_primary_helper_disable(struct drm_plane *plane);
-extern void drm_primary_helper_destroy(struct drm_plane *plane);
+int drm_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
+		  const struct drm_crtc_funcs *funcs);
+
+int drm_plane_helper_check_update(struct drm_plane *plane,
+				  struct drm_crtc *crtc,
+				  struct drm_framebuffer *fb,
+				  struct drm_rect *src,
+				  struct drm_rect *dest,
+				  const struct drm_rect *clip,
+				  int min_scale,
+				  int max_scale,
+				  bool can_position,
+				  bool can_update_disabled,
+				  bool *visible);
+int drm_primary_helper_update(struct drm_plane *plane,
+			      struct drm_crtc *crtc,
+			      struct drm_framebuffer *fb,
+			      int crtc_x, int crtc_y,
+			      unsigned int crtc_w, unsigned int crtc_h,
+			      uint32_t src_x, uint32_t src_y,
+			      uint32_t src_w, uint32_t src_h);
+int drm_primary_helper_disable(struct drm_plane *plane);
+void drm_primary_helper_destroy(struct drm_plane *plane);
 extern const struct drm_plane_funcs drm_primary_helper_funcs;
-extern struct drm_plane *drm_primary_helper_create_plane(struct drm_device *dev,
-							 uint32_t *formats,
-							 int num_formats);
 
+int drm_plane_helper_update(struct drm_plane *plane, struct drm_crtc *crtc,
+			    struct drm_framebuffer *fb,
+			    int crtc_x, int crtc_y,
+			    unsigned int crtc_w, unsigned int crtc_h,
+			    uint32_t src_x, uint32_t src_y,
+			    uint32_t src_w, uint32_t src_h);
+int drm_plane_helper_disable(struct drm_plane *plane);
 
+/* For use by drm_crtc_helper.c */
+int drm_plane_helper_commit(struct drm_plane *plane,
+			    struct drm_plane_state *plane_state,
+			    struct drm_framebuffer *old_fb);
 #endif

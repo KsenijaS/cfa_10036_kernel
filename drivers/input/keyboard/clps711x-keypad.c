@@ -120,14 +120,9 @@ static int clps711x_keypad_probe(struct platform_device *pdev)
 	for (i = 0; i < priv->row_count; i++) {
 		struct clps711x_gpio_data *data = &priv->gpio_data[i];
 
-		data->desc = devm_gpiod_get_index(dev, "row", i);
-		if (!data->desc)
-			return -EINVAL;
-
+		data->desc = devm_gpiod_get_index(dev, "row", i, GPIOD_IN);
 		if (IS_ERR(data->desc))
 			return PTR_ERR(data->desc);
-
-		gpiod_direction_input(data->desc);
 	}
 
 	err = of_property_read_u32(np, "poll-interval", &poll_interval);
@@ -185,7 +180,7 @@ static int clps711x_keypad_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct of_device_id clps711x_keypad_of_match[] = {
+static const struct of_device_id clps711x_keypad_of_match[] = {
 	{ .compatible = "cirrus,clps711x-keypad", },
 	{ }
 };
@@ -194,7 +189,6 @@ MODULE_DEVICE_TABLE(of, clps711x_keypad_of_match);
 static struct platform_driver clps711x_keypad_driver = {
 	.driver	= {
 		.name		= "clps711x-keypad",
-		.owner		= THIS_MODULE,
 		.of_match_table	= clps711x_keypad_of_match,
 	},
 	.probe	= clps711x_keypad_probe,

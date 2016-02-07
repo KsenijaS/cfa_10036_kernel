@@ -1,28 +1,25 @@
-/*******************************************************************************
-
-  Intel(R) Gigabit Ethernet Linux driver
-  Copyright(c) 2007-2014 Intel Corporation.
-
-  This program is free software; you can redistribute it and/or modify it
-  under the terms and conditions of the GNU General Public License,
-  version 2, as published by the Free Software Foundation.
-
-  This program is distributed in the hope it will be useful, but WITHOUT
-  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-  more details.
-
-  You should have received a copy of the GNU General Public License along with
-  this program; if not, see <http://www.gnu.org/licenses/>.
-
-  The full GNU General Public License is included in this distribution in
-  the file called "COPYING".
-
-  Contact Information:
-  e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
-  Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
-
-*******************************************************************************/
+/* Intel(R) Gigabit Ethernet Linux driver
+ * Copyright(c) 2007-2014 Intel Corporation.
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *
+ * The full GNU General Public License is included in this distribution in
+ * the file called "COPYING".
+ *
+ * Contact Information:
+ * e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
+ * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
+ */
 
 #ifndef _E1000_DEFINES_H_
 #define _E1000_DEFINES_H_
@@ -49,14 +46,15 @@
 #define E1000_CTRL_EXT_SDP3_DIR  0x00000800 /* SDP3 Data direction */
 
 /* Physical Func Reset Done Indication */
-#define E1000_CTRL_EXT_PFRSTD    0x00004000
-#define E1000_CTRL_EXT_LINK_MODE_MASK 0x00C00000
-#define E1000_CTRL_EXT_LINK_MODE_PCIE_SERDES  0x00C00000
-#define E1000_CTRL_EXT_LINK_MODE_1000BASE_KX  0x00400000
-#define E1000_CTRL_EXT_LINK_MODE_SGMII   0x00800000
-#define E1000_CTRL_EXT_LINK_MODE_GMII   0x00000000
-#define E1000_CTRL_EXT_EIAME          0x01000000
-#define E1000_CTRL_EXT_IRCA           0x00000001
+#define E1000_CTRL_EXT_PFRSTD	0x00004000
+#define E1000_CTRL_EXT_SDLPE	0X00040000  /* SerDes Low Power Enable */
+#define E1000_CTRL_EXT_LINK_MODE_MASK	0x00C00000
+#define E1000_CTRL_EXT_LINK_MODE_PCIE_SERDES	0x00C00000
+#define E1000_CTRL_EXT_LINK_MODE_1000BASE_KX	0x00400000
+#define E1000_CTRL_EXT_LINK_MODE_SGMII	0x00800000
+#define E1000_CTRL_EXT_LINK_MODE_GMII	0x00000000
+#define E1000_CTRL_EXT_EIAME	0x01000000
+#define E1000_CTRL_EXT_IRCA		0x00000001
 /* Interrupt delay cancellation */
 /* Driver loaded bit for FW */
 #define E1000_CTRL_EXT_DRV_LOAD       0x10000000
@@ -65,6 +63,7 @@
 /* packet buffer parity error detection enabled */
 /* descriptor FIFO parity error detection enable */
 #define E1000_CTRL_EXT_PBA_CLR		0x80000000 /* PBA Clear */
+#define E1000_CTRL_EXT_PHYPDEN		0x00100000
 #define E1000_I2CCMD_REG_ADDR_SHIFT	16
 #define E1000_I2CCMD_PHY_ADDR_SHIFT	24
 #define E1000_I2CCMD_OPCODE_READ	0x08000000
@@ -101,11 +100,11 @@
 
 /* Same mask, but for extended and packet split descriptors */
 #define E1000_RXDEXT_ERR_FRAME_ERR_MASK ( \
-    E1000_RXDEXT_STATERR_CE  |            \
-    E1000_RXDEXT_STATERR_SE  |            \
-    E1000_RXDEXT_STATERR_SEQ |            \
-    E1000_RXDEXT_STATERR_CXE |            \
-    E1000_RXDEXT_STATERR_RXE)
+	E1000_RXDEXT_STATERR_CE  |            \
+	E1000_RXDEXT_STATERR_SE  |            \
+	E1000_RXDEXT_STATERR_SEQ |            \
+	E1000_RXDEXT_STATERR_CXE |            \
+	E1000_RXDEXT_STATERR_RXE)
 
 #define E1000_MRQC_RSS_FIELD_IPV4_TCP          0x00010000
 #define E1000_MRQC_RSS_FIELD_IPV4              0x00020000
@@ -307,38 +306,33 @@
 #define E1000_TCTL_RTLC   0x01000000    /* Re-transmit on late collision */
 
 /* DMA Coalescing register fields */
-#define E1000_DMACR_DMACWT_MASK         0x00003FFF /* DMA Coalescing
-							* Watchdog Timer */
-#define E1000_DMACR_DMACTHR_MASK        0x00FF0000 /* DMA Coalescing Receive
-							* Threshold */
+#define E1000_DMACR_DMACWT_MASK         0x00003FFF /* DMA Coal Watchdog Timer */
+#define E1000_DMACR_DMACTHR_MASK        0x00FF0000 /* DMA Coal Rx Threshold */
 #define E1000_DMACR_DMACTHR_SHIFT       16
-#define E1000_DMACR_DMAC_LX_MASK        0x30000000 /* Lx when no PCIe
-							* transactions */
+#define E1000_DMACR_DMAC_LX_MASK        0x30000000 /* Lx when no PCIe trans */
 #define E1000_DMACR_DMAC_LX_SHIFT       28
 #define E1000_DMACR_DMAC_EN             0x80000000 /* Enable DMA Coalescing */
 /* DMA Coalescing BMC-to-OS Watchdog Enable */
 #define E1000_DMACR_DC_BMC2OSW_EN	0x00008000
 
-#define E1000_DMCTXTH_DMCTTHR_MASK      0x00000FFF /* DMA Coalescing Transmit
-							* Threshold */
+#define E1000_DMCTXTH_DMCTTHR_MASK      0x00000FFF /* DMA Coal Tx Threshold */
 
 #define E1000_DMCTLX_TTLX_MASK          0x00000FFF /* Time to LX request */
 
-#define E1000_DMCRTRH_UTRESH_MASK       0x0007FFFF /* Receive Traffic Rate
-							* Threshold */
-#define E1000_DMCRTRH_LRPRCW            0x80000000 /* Rcv packet rate in
-							* current window */
+#define E1000_DMCRTRH_UTRESH_MASK       0x0007FFFF /* Rx Traffic Rate Thresh */
+#define E1000_DMCRTRH_LRPRCW            0x80000000 /* Rx pkt rate curr window */
 
-#define E1000_DMCCNT_CCOUNT_MASK        0x01FFFFFF /* DMA Coal Rcv Traffic
-							* Current Cnt */
+#define E1000_DMCCNT_CCOUNT_MASK        0x01FFFFFF /* DMA Coal Rx Current Cnt */
 
-#define E1000_FCRTC_RTH_COAL_MASK       0x0003FFF0 /* Flow ctrl Rcv Threshold
-							* High val */
+#define E1000_FCRTC_RTH_COAL_MASK       0x0003FFF0 /* FC Rx Thresh High val */
 #define E1000_FCRTC_RTH_COAL_SHIFT      4
 #define E1000_PCIEMISC_LX_DECISION      0x00000080 /* Lx power decision */
 
 /* Timestamp in Rx buffer */
 #define E1000_RXPBS_CFG_TS_EN           0x80000000
+
+#define I210_RXPBSIZE_DEFAULT		0x000000A2 /* RXPBSIZE default */
+#define I210_TXPBSIZE_DEFAULT		0x04000014 /* TXPBSIZE default */
 
 /* SerDes Control */
 #define E1000_SCTL_DISABLE_SERDES_LOOPBACK 0x0400
@@ -350,7 +344,8 @@
 #define E1000_RXCSUM_PCSD      0x00002000   /* packet checksum disabled */
 
 /* Header split receive */
-#define E1000_RFCTL_LEF        0x00040000
+#define E1000_RFCTL_IPV6_EX_DIS         0x00010000
+#define E1000_RFCTL_LEF                 0x00040000
 
 /* Collision related configuration parameters */
 #define E1000_COLLISION_THRESHOLD       15
@@ -406,12 +401,12 @@
  *   o LSC    = Link Status Change
  */
 #define IMS_ENABLE_MASK ( \
-    E1000_IMS_RXT0   |    \
-    E1000_IMS_TXDW   |    \
-    E1000_IMS_RXDMT0 |    \
-    E1000_IMS_RXSEQ  |    \
-    E1000_IMS_LSC    |    \
-    E1000_IMS_DOUTSYNC)
+	E1000_IMS_RXT0   |    \
+	E1000_IMS_TXDW   |    \
+	E1000_IMS_RXDMT0 |    \
+	E1000_IMS_RXSEQ  |    \
+	E1000_IMS_LSC    |    \
+	E1000_IMS_DOUTSYNC)
 
 /* Interrupt Mask Set */
 #define E1000_IMS_TXDW      E1000_ICR_TXDW      /* Transmit desc written back */
@@ -467,7 +462,6 @@
 #define E1000_RAH_POOL_1 0x00040000
 
 /* Error Codes */
-#define E1000_SUCCESS      0
 #define E1000_ERR_NVM      1
 #define E1000_ERR_PHY      2
 #define E1000_ERR_CONFIG   3
@@ -610,6 +604,10 @@
 #define E1000_M88E1112_MAC_CTRL_1_MODE_SHIFT	7
 #define E1000_M88E1112_PAGE_ADDR		0x16
 #define E1000_M88E1112_STATUS			0x01
+#define E1000_M88E1512_CFG_REG_1		0x0010
+#define E1000_M88E1512_CFG_REG_2		0x0011
+#define E1000_M88E1512_CFG_REG_3		0x0007
+#define E1000_M88E1512_MODE			0x0014
 
 /* PCI Express Control */
 #define E1000_GCR_CMPL_TMOUT_MASK       0x0000F000
@@ -867,6 +865,7 @@
 #define M88_VENDOR           0x0141
 #define I210_I_PHY_ID        0x01410C00
 #define M88E1543_E_PHY_ID    0x01410EA0
+#define M88E1512_E_PHY_ID    0x01410DD0
 
 /* M88E1000 Specific Registers */
 #define M88E1000_PHY_SPEC_CTRL     0x10  /* PHY Specific Control Register */
@@ -928,7 +927,10 @@
 
 /* Intel i347-AT4 Registers */
 
-#define I347AT4_PCDL                   0x10 /* PHY Cable Diagnostics Length */
+#define I347AT4_PCDL0                  0x10 /* Pair 0 PHY Cable Diagnostics Length */
+#define I347AT4_PCDL1                  0x11 /* Pair 1 PHY Cable Diagnostics Length */
+#define I347AT4_PCDL2                  0x12 /* Pair 2 PHY Cable Diagnostics Length */
+#define I347AT4_PCDL3                  0x13 /* Pair 3 PHY Cable Diagnostics Length */
 #define I347AT4_PCDC                   0x15 /* PHY Cable Diagnostics Control */
 #define I347AT4_PAGE_SELECT            0x16
 
@@ -991,6 +993,7 @@
 #define E1000_M88E1543_PAGE_ADDR	0x16       /* Page Offset Register */
 #define E1000_M88E1543_EEE_CTRL_1	0x0
 #define E1000_M88E1543_EEE_CTRL_1_MS	0x0001     /* EEE Master/Slave */
+#define E1000_M88E1543_FIBER_CTRL	0x0
 #define E1000_EEE_ADV_DEV_I354		7
 #define E1000_EEE_ADV_ADDR_I354		60
 #define E1000_EEE_ADV_100_SUPPORTED	(1 << 1)   /* 100BaseTx EEE Supported */
@@ -1011,8 +1014,7 @@
 #define E1000_VFTA_ENTRY_BIT_SHIFT_MASK      0x1F
 
 /* DMA Coalescing register fields */
-#define E1000_PCIEMISC_LX_DECISION      0x00000080 /* Lx power decision based
-                                                      on DMA coal */
+#define E1000_PCIEMISC_LX_DECISION      0x00000080 /* Lx power on DMA coal */
 
 /* Tx Rate-Scheduler Config fields */
 #define E1000_RTTBCNRC_RS_ENA		0x80000000

@@ -20,12 +20,12 @@
 #include <linux/cdev.h>
 #include <linux/fsnotify.h>
 #include <linux/sysctl.h>
-#include <linux/lglock.h>
 #include <linux/percpu_counter.h>
 #include <linux/percpu.h>
 #include <linux/hardirq.h>
 #include <linux/task_work.h>
 #include <linux/ima.h>
+#include <linux/swap.h>
 
 #include <linux/atomic.h>
 
@@ -76,14 +76,14 @@ EXPORT_SYMBOL_GPL(get_max_files);
  * Handle nr_files sysctl
  */
 #if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
-int proc_nr_files(ctl_table *table, int write,
+int proc_nr_files(struct ctl_table *table, int write,
                      void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	files_stat.nr_files = get_nr_files();
 	return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
 }
 #else
-int proc_nr_files(ctl_table *table, int write,
+int proc_nr_files(struct ctl_table *table, int write,
                      void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	return -ENOSYS;
@@ -150,18 +150,10 @@ over:
 
 /**
  * alloc_file - allocate and initialize a 'struct file'
- * @mnt: the vfsmount on which the file will reside
- * @dentry: the dentry representing the new file
+ *
+ * @path: the (dentry, vfsmount) pair for the new file
  * @mode: the mode with which the new file will be opened
  * @fop: the 'struct file_operations' for the new file
- *
- * Use this instead of get_empty_filp() to get a new
- * 'struct file'.  Do so because of the same initialization
- * pitfalls reasons listed for init_file().  This is a
- * preferred interface to using init_file().
- *
- * If all the callers of init_file() are eliminated, its
- * code should be moved into this function.
  */
 struct file *alloc_file(struct path *path, fmode_t mode,
 		const struct file_operations *fop)
@@ -175,6 +167,12 @@ struct file *alloc_file(struct path *path, fmode_t mode,
 	file->f_path = *path;
 	file->f_inode = path->dentry->d_inode;
 	file->f_mapping = path->dentry->d_inode->i_mapping;
+	if ((mode & FMODE_READ) &&
+	     likely(fop->read || fop->read_iter))
+		mode |= FMODE_CAN_READ;
+	if ((mode & FMODE_WRITE) &&
+	     likely(fop->write || fop->write_iter))
+		mode |= FMODE_CAN_WRITE;
 	file->f_mode = mode;
 	file->f_op = fop;
 	if ((mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
@@ -311,19 +309,24 @@ void put_filp(struct file *file)
 	}
 }
 
-void __init files_init(unsigned long mempages)
+void __init files_init(void)
 { 
-	unsigned long n;
-
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
 			SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
+	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
+}
 
-	/*
-	 * One file with associated inode and dcache is very roughly 1K.
-	 * Per default don't use more than 10% of our memory for files. 
-	 */ 
+/*
+ * One file with associated inode and dcache is very roughly 1K. Per default
+ * do not use more than 10% of our memory for files.
+ */
+void __init files_maxfiles_init(void)
+{
+	unsigned long n;
+	unsigned long memreserve = (totalram_pages - nr_free_pages()) * 3/2;
 
-	n = (mempages * (PAGE_SIZE / 1024)) / 10;
+	memreserve = min(memreserve, totalram_pages - 1);
+	n = ((totalram_pages - memreserve) * (PAGE_SIZE / 1024)) / 10;
+
 	files_stat.max_files = max_t(unsigned long, n, NR_FILE);
-	percpu_counter_init(&nr_files, 0);
 } 

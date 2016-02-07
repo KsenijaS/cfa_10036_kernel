@@ -13,7 +13,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
-#include <dt-bindings/reset-controller/stih416-resets.h>
+#include <dt-bindings/reset/stih416-resets.h>
 
 #include "reset-syscfg.h"
 
@@ -104,6 +104,7 @@ static const struct syscfg_reset_channel_data stih416_softresets[] = {
 	[STIH416_COMPO_A_SOFTRESET] = STIH416_SRST_CPU(SYSCFG_7564, 4),
 	[STIH416_VP8_DEC_SOFTRESET] = STIH416_SRST_CPU(SYSCFG_7564, 10),
 	[STIH416_VTG_MAIN_SOFTRESET] = STIH416_SRST_CPU(SYSCFG_7564, 16),
+	[STIH416_KEYSCAN_SOFTRESET] = STIH416_SRST_LPM(LPM_SYSCFG_1, 8),
 };
 
 static struct syscfg_reset_controller_data stih416_powerdown_controller = {
@@ -119,7 +120,7 @@ static struct syscfg_reset_controller_data stih416_softreset_controller = {
 	.channels = stih416_softresets,
 };
 
-static struct of_device_id stih416_reset_match[] = {
+static const struct of_device_id stih416_reset_match[] = {
 	{ .compatible = "st,stih416-powerdown",
 	  .data = &stih416_powerdown_controller, },
 	{ .compatible = "st,stih416-softreset",
@@ -131,7 +132,6 @@ static struct platform_driver stih416_reset_driver = {
 	.probe = syscfg_reset_probe,
 	.driver = {
 		.name = "reset-stih416",
-		.owner = THIS_MODULE,
 		.of_match_table = stih416_reset_match,
 	},
 };

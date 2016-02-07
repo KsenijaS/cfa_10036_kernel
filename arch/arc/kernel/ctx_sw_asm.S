@@ -10,9 +10,9 @@
  *  -This is the more "natural" hand written assembler
  */
 
+#include <linux/linkage.h>
 #include <asm/entry.h>       /* For the SAVE_* macros */
 #include <asm/asm-offsets.h>
-#include <asm/linkage.h>
 
 #define KSP_WORD_OFF 	((TASK_THREAD + THREAD_KSP) / 4)
 
@@ -43,9 +43,6 @@ __switch_to:
 	* Since we already have last task in r0,
 	* don't need to do anything special to return it
 	*/
-
-	/* hardware memory barrier */
-	sync
 
 	/*
 	 * switch to new task, contained in r1

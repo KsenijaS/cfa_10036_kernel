@@ -56,8 +56,8 @@
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
-#include <media/msp3400.h>
-#include <media/tvaudio.h>
+#include <media/drv-intf/msp3400.h>
+#include <media/i2c/tvaudio.h>
 #include "msp3400-driver.h"
 
 /* ---------------------------------------------------------------------- */
@@ -649,10 +649,10 @@ static const struct v4l2_subdev_core_ops msp_core_ops = {
 	.s_ctrl = v4l2_subdev_s_ctrl,
 	.queryctrl = v4l2_subdev_queryctrl,
 	.querymenu = v4l2_subdev_querymenu,
-	.s_std = msp_s_std,
 };
 
 static const struct v4l2_subdev_video_ops msp_video_ops = {
+	.s_std = msp_s_std,
 	.querystd = msp_querystd,
 };
 
@@ -894,7 +894,6 @@ MODULE_DEVICE_TABLE(i2c, msp_id);
 
 static struct i2c_driver msp_driver = {
 	.driver = {
-		.owner	= THIS_MODULE,
 		.name	= "msp3400",
 		.pm	= &msp3400_pm_ops,
 	},
@@ -904,11 +903,3 @@ static struct i2c_driver msp_driver = {
 };
 
 module_i2c_driver(msp_driver);
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-basic-offset: 8
- * End:
- */

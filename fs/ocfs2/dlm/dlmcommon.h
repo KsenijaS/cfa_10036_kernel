@@ -108,7 +108,6 @@ static inline int dlm_is_recovery_lock(const char *lock_name, int name_len)
 struct dlm_recovery_ctxt
 {
 	struct list_head resources;
-	struct list_head received;
 	struct list_head node_data;
 	u8  new_master;
 	u8  dead_node;
@@ -332,6 +331,7 @@ struct dlm_lock_resource
 	u16 state;
 	char lvb[DLM_LVB_LEN];
 	unsigned int inflight_locks;
+	unsigned int inflight_assert_workers;
 	unsigned long refmap[BITS_TO_LONGS(O2NM_MAX_NODES)];
 };
 
@@ -375,17 +375,6 @@ struct dlm_lock
 		 unlock_pending:1,
 		 lksb_kernel_allocated:1;
 };
-
-
-#define DLM_LKSB_UNUSED1           0x01
-#define DLM_LKSB_PUT_LVB           0x02
-#define DLM_LKSB_GET_LVB           0x04
-#define DLM_LKSB_UNUSED2           0x08
-#define DLM_LKSB_UNUSED3           0x10
-#define DLM_LKSB_UNUSED4           0x20
-#define DLM_LKSB_UNUSED5           0x40
-#define DLM_LKSB_UNUSED6           0x80
-
 
 enum dlm_lockres_list {
 	DLM_GRANTED_LIST = 0,
@@ -911,6 +900,9 @@ void dlm_lockres_drop_inflight_ref(struct dlm_ctxt *dlm,
 void dlm_lockres_grab_inflight_ref(struct dlm_ctxt *dlm,
 				   struct dlm_lock_resource *res);
 
+void __dlm_lockres_grab_inflight_worker(struct dlm_ctxt *dlm,
+		struct dlm_lock_resource *res);
+
 void dlm_queue_ast(struct dlm_ctxt *dlm, struct dlm_lock *lock);
 void dlm_queue_bast(struct dlm_ctxt *dlm, struct dlm_lock *lock);
 void __dlm_queue_ast(struct dlm_ctxt *dlm, struct dlm_lock *lock);
@@ -1011,7 +1003,6 @@ void dlm_move_lockres_to_recovery_list(struct dlm_ctxt *dlm,
 
 /* will exit holding res->spinlock, but may drop in function */
 void __dlm_wait_on_lockres_flags(struct dlm_lock_resource *res, int flags);
-void __dlm_wait_on_lockres_flags_set(struct dlm_lock_resource *res, int flags);
 
 /* will exit holding res->spinlock, but may drop in function */
 static inline void __dlm_wait_on_lockres(struct dlm_lock_resource *res)

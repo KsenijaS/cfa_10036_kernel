@@ -16,10 +16,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
- *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -30,8 +26,10 @@
 #include <linux/types.h>
 #include <linux/hardirq.h>
 #include <linux/acpi.h>
+#include <linux/dynamic_debug.h>
 
 #include "internal.h"
+#include "sleep.h"
 
 #define _COMPONENT		ACPI_BUS_COMPONENT
 ACPI_MODULE_NAME("utils");
@@ -135,13 +133,27 @@ acpi_extract_package(union acpi_object *package,
 				break;
 			case 'B':
 				size_required +=
-				    sizeof(u8 *) +
-				    (element->buffer.length * sizeof(u8));
+				    sizeof(u8 *) + element->buffer.length;
 				tail_offset += sizeof(u8 *);
 				break;
 			default:
 				printk(KERN_WARNING PREFIX "Invalid package element"
 					      " [%d] got string/buffer,"
+					      " expecting [%c]\n",
+					      i, format_string[i]);
+				return AE_BAD_DATA;
+				break;
+			}
+			break;
+		case ACPI_TYPE_LOCAL_REFERENCE:
+			switch (format_string[i]) {
+			case 'R':
+				size_required += sizeof(void *);
+				tail_offset += sizeof(void *);
+				break;
+			default:
+				printk(KERN_WARNING PREFIX "Invalid package element"
+					      " [%d] got reference,"
 					      " expecting [%c]\n",
 					      i, format_string[i]);
 				return AE_BAD_DATA;
@@ -239,14 +251,25 @@ acpi_extract_package(union acpi_object *package,
 				memcpy(tail, element->buffer.pointer,
 				       element->buffer.length);
 				head += sizeof(u8 *);
-				tail += element->buffer.length * sizeof(u8);
+				tail += element->buffer.length;
 				break;
 			default:
 				/* Should never get here */
 				break;
 			}
 			break;
-
+		case ACPI_TYPE_LOCAL_REFERENCE:
+			switch (format_string[i]) {
+			case 'R':
+				*(void **)head =
+				    (void *)element->reference.handle;
+				head += sizeof(void *);
+				break;
+			default:
+				/* Should never get here */
+				break;
+			}
+			break;
 		case ACPI_TYPE_PACKAGE:
 			/* TBD: handle nested packages... */
 		default:
@@ -320,22 +343,16 @@ acpi_evaluate_reference(acpi_handle handle,
 	package = buffer.pointer;
 
 	if ((buffer.length == 0) || !package) {
-		printk(KERN_ERR PREFIX "No return object (len %X ptr %p)\n",
-			    (unsigned)buffer.length, package);
 		status = AE_BAD_DATA;
 		acpi_util_eval_error(handle, pathname, status);
 		goto end;
 	}
 	if (package->type != ACPI_TYPE_PACKAGE) {
-		printk(KERN_ERR PREFIX "Expecting a [Package], found type %X\n",
-			    package->type);
 		status = AE_BAD_DATA;
 		acpi_util_eval_error(handle, pathname, status);
 		goto end;
 	}
 	if (!package->package.count) {
-		printk(KERN_ERR PREFIX "[Package] has zero elements (%p)\n",
-			    package);
 		status = AE_BAD_DATA;
 		acpi_util_eval_error(handle, pathname, status);
 		goto end;
@@ -354,17 +371,13 @@ acpi_evaluate_reference(acpi_handle handle,
 
 		if (element->type != ACPI_TYPE_LOCAL_REFERENCE) {
 			status = AE_BAD_DATA;
-			printk(KERN_ERR PREFIX
-				    "Expecting a [Reference] package element, found type %X\n",
-				    element->type);
 			acpi_util_eval_error(handle, pathname, status);
 			break;
 		}
 
 		if (!element->reference.handle) {
-			printk(KERN_WARNING PREFIX "Invalid reference in"
-			       " package %s\n", pathname);
 			status = AE_NULL_ENTRY;
+			acpi_util_eval_error(handle, pathname, status);
 			break;
 		}
 		/* Get the  acpi_handle. */
@@ -457,6 +470,24 @@ acpi_evaluate_ost(acpi_handle handle, u32 source_event, u32 status_code,
 EXPORT_SYMBOL(acpi_evaluate_ost);
 
 /**
+ * acpi_handle_path: Return the object path of handle
+ *
+ * Caller must free the returned buffer
+ */
+static char *acpi_handle_path(acpi_handle handle)
+{
+	struct acpi_buffer buffer = {
+		.length = ACPI_ALLOCATE_BUFFER,
+		.pointer = NULL
+	};
+
+	if (in_interrupt() ||
+	    acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer) != AE_OK)
+		return NULL;
+	return buffer.pointer;
+}
+
+/**
  * acpi_handle_printk: Print message with ACPI prefix and object path
  *
  * This function is called through acpi_handle_<level> macros and prints
@@ -469,28 +500,49 @@ acpi_handle_printk(const char *level, acpi_handle handle, const char *fmt, ...)
 {
 	struct va_format vaf;
 	va_list args;
-	struct acpi_buffer buffer = {
-		.length = ACPI_ALLOCATE_BUFFER,
-		.pointer = NULL
-	};
 	const char *path;
 
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
 
-	if (in_interrupt() ||
-	    acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer) != AE_OK)
-		path = "<n/a>";
-	else
-		path = buffer.pointer;
-
-	printk("%sACPI: %s: %pV", level, path, &vaf);
+	path = acpi_handle_path(handle);
+	printk("%sACPI: %s: %pV", level, path ? path : "<n/a>" , &vaf);
 
 	va_end(args);
-	kfree(buffer.pointer);
+	kfree(path);
 }
 EXPORT_SYMBOL(acpi_handle_printk);
+
+#if defined(CONFIG_DYNAMIC_DEBUG)
+/**
+ * __acpi_handle_debug: pr_debug with ACPI prefix and object path
+ *
+ * This function is called through acpi_handle_debug macro and debug
+ * prints a message with ACPI prefix and object path. This function
+ * acquires the global namespace mutex to obtain an object path.  In
+ * interrupt context, it shows the object path as <n/a>.
+ */
+void
+__acpi_handle_debug(struct _ddebug *descriptor, acpi_handle handle,
+		    const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+	const char *path;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+
+	path = acpi_handle_path(handle);
+	__dynamic_pr_debug(descriptor, "ACPI: %s: %pV", path ? path : "<n/a>", &vaf);
+
+	va_end(args);
+	kfree(path);
+}
+EXPORT_SYMBOL(__acpi_handle_debug);
+#endif
 
 /**
  * acpi_has_method: Check whether @handle has a method named @name
@@ -621,7 +673,6 @@ EXPORT_SYMBOL(acpi_evaluate_dsm);
  * @uuid: UUID of requested functions, should be 16 bytes at least
  * @rev: revision number of requested functions
  * @funcs: bitmap of requested functions
- * @exclude: excluding special value, used to support i915 and nouveau
  *
  * Evaluate device's _DSM method to check whether it supports requested
  * functions. Currently only support 64 functions at maximum, should be
@@ -658,3 +709,48 @@ bool acpi_check_dsm(acpi_handle handle, const u8 *uuid, int rev, u64 funcs)
 	return false;
 }
 EXPORT_SYMBOL(acpi_check_dsm);
+
+/**
+ * acpi_dev_present - Detect presence of a given ACPI device in the system.
+ * @hid: Hardware ID of the device.
+ *
+ * Return %true if the device was present at the moment of invocation.
+ * Note that if the device is pluggable, it may since have disappeared.
+ *
+ * For this function to work, acpi_bus_scan() must have been executed
+ * which happens in the subsys_initcall() subsection. Hence, do not
+ * call from a subsys_initcall() or earlier (use acpi_get_devices()
+ * instead). Calling from module_init() is fine (which is synonymous
+ * with device_initcall()).
+ */
+bool acpi_dev_present(const char *hid)
+{
+	struct acpi_device_bus_id *acpi_device_bus_id;
+	bool found = false;
+
+	mutex_lock(&acpi_device_lock);
+	list_for_each_entry(acpi_device_bus_id, &acpi_bus_id_list, node)
+		if (!strcmp(acpi_device_bus_id->bus_id, hid)) {
+			found = true;
+			break;
+		}
+	mutex_unlock(&acpi_device_lock);
+
+	return found;
+}
+EXPORT_SYMBOL(acpi_dev_present);
+
+/*
+ * acpi_backlight= handling, this is done here rather then in video_detect.c
+ * because __setup cannot be used in modules.
+ */
+char acpi_video_backlight_string[16];
+EXPORT_SYMBOL(acpi_video_backlight_string);
+
+static int __init acpi_backlight(char *str)
+{
+	strlcpy(acpi_video_backlight_string, str,
+		sizeof(acpi_video_backlight_string));
+	return 1;
+}
+__setup("acpi_backlight=", acpi_backlight);

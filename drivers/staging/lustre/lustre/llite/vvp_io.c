@@ -27,7 +27,7 @@
  * Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  *
- * Copyright (c) 2011, 2012, Intel Corporation.
+ * Copyright (c) 2011, 2015, Intel Corporation.
  */
 /*
  * This file is part of Lustre, http://www.lustre.org/
@@ -41,9 +41,8 @@
 
 #define DEBUG_SUBSYSTEM S_LLITE
 
-
-#include <obd.h>
-#include <lustre_lite.h>
+#include "../include/obd.h"
+#include "../include/lustre_lite.h"
 
 #include "vvp_internal.h"
 
@@ -80,7 +79,7 @@ static bool can_populate_pages(const struct lu_env *env, struct cl_io *io,
 	case CIT_WRITE:
 		/* don't need lock here to check lli_layout_gen as we have held
 		 * extent lock and GROUP lock has to hold to swap layout */
-		if (lli->lli_layout_gen != cio->cui_layout_gen) {
+		if (ll_layout_version_get(lli) != cio->cui_layout_gen) {
 			io->ci_need_restart = 1;
 			/* this will return application a short read/write */
 			io->ci_continue = 0;
@@ -108,8 +107,8 @@ static int vvp_io_fault_iter_init(const struct lu_env *env,
 	struct inode  *inode = ccc_object_inode(ios->cis_obj);
 
 	LASSERT(inode ==
-		cl2ccc_io(env, ios)->cui_fd->fd_file->f_dentry->d_inode);
-	vio->u.fault.ft_mtime = LTIME_S(inode->i_mtime);
+		file_inode(cl2ccc_io(env, ios)->cui_fd->fd_file));
+	vio->u.fault.ft_mtime = inode->i_mtime.tv_sec;
 	return 0;
 }
 
@@ -190,7 +189,7 @@ static void vvp_io_fault_fini(const struct lu_env *env,
 	vvp_io_fini(env, ios);
 }
 
-enum cl_lock_mode vvp_mode_from_vma(struct vm_area_struct *vma)
+static enum cl_lock_mode vvp_mode_from_vma(struct vm_area_struct *vma)
 {
 	/*
 	 * we only want to hold PW locks if the mmap() can generate
@@ -211,27 +210,26 @@ static int vvp_mmap_locks(const struct lu_env *env,
 	struct cl_lock_descr   *descr = &cti->cti_descr;
 	ldlm_policy_data_t      policy;
 	unsigned long	   addr;
-	unsigned long	   seg;
 	ssize_t		 count;
 	int		     result;
+	struct iov_iter i;
+	struct iovec iov;
 
 	LASSERT(io->ci_type == CIT_READ || io->ci_type == CIT_WRITE);
 
 	if (!cl_is_normalio(env, io))
 		return 0;
 
-	if (vio->cui_iov == NULL) /* nfs or loop back device write */
+	if (vio->cui_iter == NULL) /* nfs or loop back device write */
 		return 0;
 
 	/* No MM (e.g. NFS)? No vmas too. */
 	if (mm == NULL)
 		return 0;
 
-	for (seg = 0; seg < vio->cui_nrsegs; seg++) {
-		const struct iovec *iv = &vio->cui_iov[seg];
-
-		addr = (unsigned long)iv->iov_base;
-		count = iv->iov_len;
+	iov_for_each(iov, i, *(vio->cui_iter)) {
+		addr = (unsigned long)iov.iov_base;
+		count = iov.iov_len;
 		if (count == 0)
 			continue;
 
@@ -239,8 +237,8 @@ static int vvp_mmap_locks(const struct lu_env *env,
 		addr &= CFS_PAGE_MASK;
 
 		down_read(&mm->mmap_sem);
-		while((vma = our_vma(mm, addr, count)) != NULL) {
-			struct inode *inode = vma->vm_file->f_dentry->d_inode;
+		while ((vma = our_vma(mm, addr, count)) != NULL) {
+			struct inode *inode = file_inode(vma->vm_file);
 			int flags = CEF_MUST;
 
 			if (ll_file_nolock(vma->vm_file)) {
@@ -270,8 +268,10 @@ static int vvp_mmap_locks(const struct lu_env *env,
 			       descr->cld_mode, descr->cld_start,
 			       descr->cld_end);
 
-			if (result < 0)
+			if (result < 0) {
+				up_read(&mm->mmap_sem);
 				return result;
+			}
 
 			if (vma->vm_end - addr >= count)
 				break;
@@ -306,18 +306,13 @@ static int vvp_io_rw_lock(const struct lu_env *env, struct cl_io *io,
 static int vvp_io_read_lock(const struct lu_env *env,
 			    const struct cl_io_slice *ios)
 {
-	struct cl_io	 *io  = ios->cis_io;
-	struct ll_inode_info *lli = ll_i2info(ccc_object_inode(io->ci_obj));
+	struct cl_io	 *io = ios->cis_io;
+	struct cl_io_rw_common *rd = &io->u.ci_rd.rd;
 	int result;
 
-	/* XXX: Layer violation, we shouldn't see lsm at llite level. */
-	if (lli->lli_has_smd) /* lsm-less file doesn't need to lock */
-		result = vvp_io_rw_lock(env, io, CLM_READ,
-					io->u.ci_rd.rd.crw_pos,
-					io->u.ci_rd.rd.crw_pos +
-					io->u.ci_rd.rd.crw_count - 1);
-	else
-		result = 0;
+	result = vvp_io_rw_lock(env, io, CLM_READ, rd->crw_pos,
+				rd->crw_pos + rd->crw_count - 1);
+
 	return result;
 }
 
@@ -444,7 +439,7 @@ static int vvp_io_setattr_start(const struct lu_env *env,
 	struct inode	*inode = ccc_object_inode(io->ci_obj);
 	int result = 0;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	if (cl_io_is_trunc(io))
 		result = vvp_io_setattr_trunc(env, ios, inode,
 					io->u.ci_setattr.sa_attr.lvb_size);
@@ -459,13 +454,12 @@ static void vvp_io_setattr_end(const struct lu_env *env,
 	struct cl_io *io    = ios->cis_io;
 	struct inode *inode = ccc_object_inode(io->ci_obj);
 
-	if (cl_io_is_trunc(io)) {
+	if (cl_io_is_trunc(io))
 		/* Truncate in memory pages - they must be clean pages
 		 * because osc has already notified to destroy osc_extents. */
 		vvp_do_vmtruncate(inode, io->u.ci_setattr.sa_attr.lvb_size);
-		inode_dio_write_done(inode);
-	}
-	mutex_unlock(&inode->i_mutex);
+
+	inode_unlock(inode);
 }
 
 static void vvp_io_setattr_fini(const struct lu_env *env,
@@ -527,9 +521,7 @@ static int vvp_io_read_start(const struct lu_env *env,
 	switch (vio->cui_io_subtype) {
 	case IO_NORMAL:
 		LASSERT(cio->cui_iocb->ki_pos == pos);
-		result = generic_file_aio_read(cio->cui_iocb,
-					       cio->cui_iov, cio->cui_nrsegs,
-					       cio->cui_iocb->ki_pos);
+		result = generic_file_read_iter(cio->cui_iocb, cio->cui_iter);
 		break;
 	case IO_SPLICE:
 		result = generic_file_splice_read(file, &pos,
@@ -595,12 +587,11 @@ static int vvp_io_write_start(const struct lu_env *env,
 
 	CDEBUG(D_VFSTRACE, "write: [%lli, %lli)\n", pos, pos + (long long)cnt);
 
-	if (cio->cui_iov == NULL) /* from a temp io in ll_cl_init(). */
+	if (cio->cui_iter == NULL) /* from a temp io in ll_cl_init(). */
 		result = 0;
 	else
-		result = generic_file_aio_write(cio->cui_iocb,
-						cio->cui_iov, cio->cui_nrsegs,
-						cio->cui_iocb->ki_pos);
+		result = generic_file_write_iter(cio->cui_iocb, cio->cui_iter);
+
 	if (result > 0) {
 		if (result < cnt)
 			io->ci_continue = 0;
@@ -617,6 +608,7 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 	struct vm_fault *vmf = cfio->fault.ft_vmf;
 
 	cfio->fault.ft_flags = filemap_fault(cfio->ft_vma, vmf);
+	cfio->fault.ft_flags_valid = 1;
 
 	if (vmf->page) {
 		CDEBUG(D_PAGE,
@@ -626,14 +618,14 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 		       page_private(vmf->page), vmf->virtual_address);
 		if (unlikely(!(cfio->fault.ft_flags & VM_FAULT_LOCKED))) {
 			lock_page(vmf->page);
-			cfio->fault.ft_flags &= VM_FAULT_LOCKED;
+			cfio->fault.ft_flags |= VM_FAULT_LOCKED;
 		}
 
 		cfio->ft_vmpage = vmf->page;
 		return 0;
 	}
 
-	if (cfio->fault.ft_flags & VM_FAULT_SIGBUS) {
+	if (cfio->fault.ft_flags & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV)) {
 		CDEBUG(D_PAGE, "got addr %p - SIGBUS\n", vmf->virtual_address);
 		return -EFAULT;
 	}
@@ -649,7 +641,6 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 	CERROR("Unknown error in page fault %d!\n", cfio->fault.ft_flags);
 	return -EINVAL;
 }
-
 
 static int vvp_io_fault_start(const struct lu_env *env,
 			      const struct cl_io_slice *ios)
@@ -668,7 +659,7 @@ static int vvp_io_fault_start(const struct lu_env *env,
 	pgoff_t	      last; /* last page in a file data region */
 
 	if (fio->ft_executable &&
-	    LTIME_S(inode->i_mtime) != vio->u.fault.ft_mtime)
+	    inode->i_mtime.tv_sec != vio->u.fault.ft_mtime)
 		CWARN("binary "DFID
 		      " changed while waiting for the page fault lock\n",
 		      PFID(lu_object_fid(&obj->co_lu)));
@@ -705,11 +696,11 @@ static int vvp_io_fault_start(const struct lu_env *env,
 
 		/* return +1 to stop cl_io_loop() and ll_fault() will catch
 		 * and retry. */
-		GOTO(out, result = +1);
+		result = 1;
+		goto out;
 	}
 
-
-	if (fio->ft_mkwrite ) {
+	if (fio->ft_mkwrite) {
 		pgoff_t last_index;
 		/*
 		 * Capture the size while holding the lli_trunc_sem from above
@@ -720,9 +711,8 @@ static int vvp_io_fault_start(const struct lu_env *env,
 		last_index = cl_index(obj, size - 1);
 		if (last_index < fio->ft_index) {
 			CDEBUG(D_PAGE,
-				"llite: mkwrite and truncate race happened: "
-				"%p: 0x%lx 0x%lx\n",
-				vmpage->mapping,fio->ft_index,last_index);
+			       "llite: mkwrite and truncate race happened: %p: 0x%lx 0x%lx\n",
+			       vmpage->mapping, fio->ft_index, last_index);
 			/*
 			 * We need to return if we are
 			 * passed the end of the file. This will propagate
@@ -734,13 +724,16 @@ static int vvp_io_fault_start(const struct lu_env *env,
 			 * in ll_page_mkwrite0. Thus we return -ENODATA
 			 * to handle both cases
 			 */
-			GOTO(out, result = -ENODATA);
+			result = -ENODATA;
+			goto out;
 		}
 	}
 
 	page = cl_page_find(env, obj, fio->ft_index, vmpage, CPT_CACHEABLE);
-	if (IS_ERR(page))
-		GOTO(out, result = PTR_ERR(page));
+	if (IS_ERR(page)) {
+		result = PTR_ERR(page);
+		goto out;
+	}
 
 	/* if page is going to be written, we should add this page into cache
 	 * earlier. */
@@ -772,7 +765,7 @@ static int vvp_io_fault_start(const struct lu_env *env,
 				/* we're in big trouble, what can we do now? */
 				if (result == -EDQUOT)
 					result = -ENOSPC;
-				GOTO(out, result);
+				goto out;
 			} else
 				cl_page_disown(env, io, page);
 		}
@@ -856,7 +849,7 @@ static int vvp_io_read_page(const struct lu_env *env,
 	 * Add page into the queue even when it is marked uptodate above.
 	 * this will unlock it automatically as part of cl_page_list_disown().
 	 */
-	cl_2queue_add(queue, page);
+	cl_page_list_add(&queue->c2_qin, page);
 	if (sbi->ll_ra_info.ra_max_pages_per_file &&
 	    sbi->ll_ra_info.ra_max_pages)
 		ll_readahead(env, io, ras,
@@ -1043,6 +1036,7 @@ static int vvp_io_commit_write(const struct lu_env *env,
 				need_clip = false;
 			} else if (last_index == pg->cp_index) {
 				int size_to = i_size_read(inode) & ~CFS_PAGE_MASK;
+
 				if (to < size_to)
 					to = size_to;
 			}
@@ -1162,10 +1156,9 @@ int vvp_io_init(const struct lu_env *env, struct cl_object *obj,
 		 *  results."  -- Single Unix Spec */
 		if (count == 0)
 			result = 1;
-		else {
+		else
 			cio->cui_tot_count = count;
-			cio->cui_tot_nrsegs = 0;
-		}
+
 		/* for read/write, we store the jobid in the inode, and
 		 * it'll be fetched by osc when building RPC.
 		 *

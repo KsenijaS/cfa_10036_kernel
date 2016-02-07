@@ -164,6 +164,7 @@ struct team_mode {
 	size_t priv_size;
 	size_t port_priv_size;
 	const struct team_mode_ops *ops;
+	enum netdev_lag_tx_type lag_tx_type;
 };
 
 #define TEAM_PORT_HASHBITS 4
@@ -194,6 +195,7 @@ struct team {
 	bool user_carrier_enabled;
 	bool queue_override_enabled;
 	struct list_head *qom_lists; /* array of queue override mapping lists */
+	bool port_mtu_change_allowed;
 	struct {
 		unsigned int count;
 		unsigned int interval; /* in ms */

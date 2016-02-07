@@ -200,6 +200,8 @@ enum tps65218_regulator_id {
 	TPS65218_DCDC_4,
 	TPS65218_DCDC_5,
 	TPS65218_DCDC_6,
+	/* LS's */
+	TPS65218_LS_3,
 	/* LDOs */
 	TPS65218_LDO_1,
 };
@@ -210,8 +212,11 @@ enum tps65218_regulator_id {
 #define TPS65218_NUM_DCDC		6
 /* Number of LDO voltage regulators available */
 #define TPS65218_NUM_LDO		1
+/* Number of total LS current regulators available */
+#define TPS65218_NUM_LS			1
 /* Number of total regulators available */
-#define TPS65218_NUM_REGULATOR		(TPS65218_NUM_DCDC + TPS65218_NUM_LDO)
+#define TPS65218_NUM_REGULATOR		(TPS65218_NUM_DCDC + TPS65218_NUM_LDO \
+					 + TPS65218_NUM_LS)
 
 /* Define the TPS65218 IRQ numbers */
 enum tps65218_irqs {
@@ -267,7 +272,6 @@ struct tps65218 {
 	u32 irq_mask;
 	struct regmap_irq_chip_data *irq_data;
 	struct regulator_desc desc[TPS65218_NUM_REGULATOR];
-	struct regulator_dev *rdev[TPS65218_NUM_REGULATOR];
 	struct tps_info *info[TPS65218_NUM_REGULATOR];
 	struct regmap *regmap;
 };

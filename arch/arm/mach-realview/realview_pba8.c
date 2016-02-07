@@ -39,9 +39,9 @@
 #include <asm/mach/map.h>
 #include <asm/mach/time.h>
 
-#include <mach/hardware.h>
-#include <mach/board-pba8.h>
-#include <mach/irqs.h>
+#include "hardware.h"
+#include "board-pba8.h"
+#include "irqs-pba8.h"
 
 #include "core.h"
 
@@ -77,14 +77,6 @@ static struct map_desc realview_pba8_io_desc[] __initdata = {
 		.length		= SZ_4K,
 		.type		= MT_DEVICE,
 	},
-#ifdef CONFIG_PCI
-	{
-		.virtual	= PCIX_UNIT_BASE,
-		.pfn		= __phys_to_pfn(REALVIEW_PBA8_PCI_BASE),
-		.length		= REALVIEW_PBA8_PCI_BASE_SIZE,
-		.type		= MT_DEVICE
-	},
-#endif
 #ifdef CONFIG_DEBUG_LL
 	{
 		.virtual	= IO_ADDRESS(REALVIEW_PBA8_UART0_BASE),
@@ -240,7 +232,7 @@ static struct resource pmu_resource = {
 };
 
 static struct platform_device pmu_device = {
-	.name			= "arm-pmu",
+	.name			= "armv7-pmu",
 	.id			= -1,
 	.num_resources		= 1,
 	.resource		= &pmu_resource,
@@ -289,6 +281,7 @@ static void __init realview_pba8_init(void)
 	realview_eth_register(NULL, realview_pba8_smsc911x_resources);
 	platform_device_register(&realview_i2c_device);
 	platform_device_register(&realview_cf_device);
+	platform_device_register(&realview_leds_device);
 	realview_usb_register(realview_pba8_isp1761_resources);
 	platform_device_register(&pmu_device);
 

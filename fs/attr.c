@@ -50,14 +50,14 @@ int inode_change_ok(const struct inode *inode, struct iattr *attr)
 	if ((ia_valid & ATTR_UID) &&
 	    (!uid_eq(current_fsuid(), inode->i_uid) ||
 	     !uid_eq(attr->ia_uid, inode->i_uid)) &&
-	    !inode_capable(inode, CAP_CHOWN))
+	    !capable_wrt_inode_uidgid(inode, CAP_CHOWN))
 		return -EPERM;
 
 	/* Make sure caller can chgrp. */
 	if ((ia_valid & ATTR_GID) &&
 	    (!uid_eq(current_fsuid(), inode->i_uid) ||
 	    (!in_group_p(attr->ia_gid) && !gid_eq(attr->ia_gid, inode->i_gid))) &&
-	    !inode_capable(inode, CAP_CHOWN))
+	    !capable_wrt_inode_uidgid(inode, CAP_CHOWN))
 		return -EPERM;
 
 	/* Make sure a caller can chmod. */
@@ -67,7 +67,7 @@ int inode_change_ok(const struct inode *inode, struct iattr *attr)
 		/* Also check the setgid bit! */
 		if (!in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
 				inode->i_gid) &&
-		    !inode_capable(inode, CAP_FSETID))
+		    !capable_wrt_inode_uidgid(inode, CAP_FSETID))
 			attr->ia_mode &= ~S_ISGID;
 	}
 
@@ -160,7 +160,7 @@ void setattr_copy(struct inode *inode, const struct iattr *attr)
 		umode_t mode = attr->ia_mode;
 
 		if (!in_group_p(inode->i_gid) &&
-		    !inode_capable(inode, CAP_FSETID))
+		    !capable_wrt_inode_uidgid(inode, CAP_FSETID))
 			mode &= ~S_ISGID;
 		inode->i_mode = mode;
 	}
@@ -195,7 +195,7 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	struct timespec now;
 	unsigned int ia_valid = attr->ia_valid;
 
-	WARN_ON_ONCE(!mutex_is_locked(&inode->i_mutex));
+	WARN_ON_ONCE(!inode_is_locked(inode));
 
 	if (ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID | ATTR_TIMES_SET)) {
 		if (IS_IMMUTABLE(inode) || IS_APPEND(inode))

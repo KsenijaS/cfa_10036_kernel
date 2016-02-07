@@ -44,10 +44,11 @@ int gfs2_trans_begin(struct gfs2_sbd *sdp, unsigned int blocks,
 	if (!tr)
 		return -ENOMEM;
 
-	tr->tr_ip = (unsigned long)__builtin_return_address(0);
+	tr->tr_ip = _RET_IP_;
 	tr->tr_blocks = blocks;
 	tr->tr_revokes = revokes;
 	tr->tr_reserved = 1;
+	tr->tr_alloced = 1;
 	if (blocks)
 		tr->tr_reserved += 6 + blocks;
 	if (revokes)
@@ -57,46 +58,20 @@ int gfs2_trans_begin(struct gfs2_sbd *sdp, unsigned int blocks,
 	INIT_LIST_HEAD(&tr->tr_buf);
 
 	sb_start_intwrite(sdp->sd_vfs);
-	gfs2_holder_init(sdp->sd_trans_gl, LM_ST_SHARED, 0, &tr->tr_t_gh);
-
-	error = gfs2_glock_nq(&tr->tr_t_gh);
-	if (error)
-		goto fail_holder_uninit;
 
 	error = gfs2_log_reserve(sdp, tr->tr_reserved);
 	if (error)
-		goto fail_gunlock;
+		goto fail;
 
 	current->journal_info = tr;
 
 	return 0;
 
-fail_gunlock:
-	gfs2_glock_dq(&tr->tr_t_gh);
-
-fail_holder_uninit:
+fail:
 	sb_end_intwrite(sdp->sd_vfs);
-	gfs2_holder_uninit(&tr->tr_t_gh);
 	kfree(tr);
 
 	return error;
-}
-
-/**
- * gfs2_log_release - Release a given number of log blocks
- * @sdp: The GFS2 superblock
- * @blks: The number of blocks
- *
- */
-
-static void gfs2_log_release(struct gfs2_sbd *sdp, unsigned int blks)
-{
-
-	atomic_add(blks, &sdp->sd_log_blks_free);
-	trace_gfs2_log_blocks(sdp, blks);
-	gfs2_assert_withdraw(sdp, atomic_read(&sdp->sd_log_blks_free) <=
-				  sdp->sd_jdesc->jd_blocks);
-	up_read(&sdp->sd_log_flush_lock);
 }
 
 static void gfs2_print_trans(const struct gfs2_trans *tr)
@@ -114,17 +89,17 @@ void gfs2_trans_end(struct gfs2_sbd *sdp)
 {
 	struct gfs2_trans *tr = current->journal_info;
 	s64 nbuf;
+	int alloced = tr->tr_alloced;
+
 	BUG_ON(!tr);
 	current->journal_info = NULL;
 
 	if (!tr->tr_touched) {
 		gfs2_log_release(sdp, tr->tr_reserved);
-		if (tr->tr_t_gh.gh_gl) {
-			gfs2_glock_dq(&tr->tr_t_gh);
-			gfs2_holder_uninit(&tr->tr_t_gh);
+		if (alloced) {
 			kfree(tr);
+			sb_end_intwrite(sdp->sd_vfs);
 		}
-		sb_end_intwrite(sdp->sd_vfs);
 		return;
 	}
 
@@ -137,17 +112,14 @@ void gfs2_trans_end(struct gfs2_sbd *sdp)
 		gfs2_print_trans(tr);
 
 	gfs2_log_commit(sdp, tr);
-	if (tr->tr_t_gh.gh_gl) {
-		gfs2_glock_dq(&tr->tr_t_gh);
-		gfs2_holder_uninit(&tr->tr_t_gh);
-		if (!tr->tr_attached)
+	if (alloced && !tr->tr_attached)
 			kfree(tr);
-	}
 	up_read(&sdp->sd_log_flush_lock);
 
 	if (sdp->sd_vfs->s_flags & MS_SYNCHRONOUS)
-		gfs2_log_flush(sdp, NULL);
-	sb_end_intwrite(sdp->sd_vfs);
+		gfs2_log_flush(sdp, NULL, NORMAL_FLUSH);
+	if (alloced)
+		sb_end_intwrite(sdp->sd_vfs);
 }
 
 static struct gfs2_bufdata *gfs2_alloc_bufdata(struct gfs2_glock *gl,
@@ -186,7 +158,7 @@ static struct gfs2_bufdata *gfs2_alloc_bufdata(struct gfs2_glock *gl,
 void gfs2_trans_add_data(struct gfs2_glock *gl, struct buffer_head *bh)
 {
 	struct gfs2_trans *tr = current->journal_info;
-	struct gfs2_sbd *sdp = gl->gl_sbd;
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct address_space *mapping = bh->b_page->mapping;
 	struct gfs2_inode *ip = GFS2_I(mapping->host);
 	struct gfs2_bufdata *bd;
@@ -204,6 +176,8 @@ void gfs2_trans_add_data(struct gfs2_glock *gl, struct buffer_head *bh)
 		unlock_buffer(bh);
 		if (bh->b_private == NULL)
 			bd = gfs2_alloc_bufdata(gl, bh, &gfs2_databuf_lops);
+		else
+			bd = bh->b_private;
 		lock_buffer(bh);
 		gfs2_log_lock(sdp);
 	}
@@ -224,6 +198,7 @@ static void meta_lo_add(struct gfs2_sbd *sdp, struct gfs2_bufdata *bd)
 {
 	struct gfs2_meta_header *mh;
 	struct gfs2_trans *tr;
+	enum gfs2_freeze_state state = atomic_read(&sdp->sd_freeze_state);
 
 	tr = current->journal_info;
 	tr->tr_touched = 1;
@@ -237,6 +212,10 @@ static void meta_lo_add(struct gfs2_sbd *sdp, struct gfs2_bufdata *bd)
 		       (unsigned long long)bd->bd_bh->b_blocknr);
 		BUG();
 	}
+	if (unlikely(state == SFS_FROZEN)) {
+		printk(KERN_INFO "GFS2:adding buf while frozen\n");
+		gfs2_assert_withdraw(sdp, 0);
+	}
 	gfs2_pin(sdp, bd->bd_bh);
 	mh->__pad0 = cpu_to_be64(0);
 	mh->mh_jid = cpu_to_be32(sdp->sd_jdesc->jd_jid);
@@ -247,7 +226,7 @@ static void meta_lo_add(struct gfs2_sbd *sdp, struct gfs2_bufdata *bd)
 void gfs2_trans_add_meta(struct gfs2_glock *gl, struct buffer_head *bh)
 {
 
-	struct gfs2_sbd *sdp = gl->gl_sbd;
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct gfs2_bufdata *bd;
 
 	lock_buffer(bh);
@@ -259,6 +238,8 @@ void gfs2_trans_add_meta(struct gfs2_glock *gl, struct buffer_head *bh)
 		lock_page(bh->b_page);
 		if (bh->b_private == NULL)
 			bd = gfs2_alloc_bufdata(gl, bh, &gfs2_buf_lops);
+		else
+			bd = bh->b_private;
 		unlock_page(bh->b_page);
 		lock_buffer(bh);
 		gfs2_log_lock(sdp);

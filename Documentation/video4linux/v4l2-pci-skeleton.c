@@ -37,12 +37,12 @@
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-event.h>
+#include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-dma-contig.h>
 
 MODULE_DESCRIPTION("V4L2 PCI Skeleton Driver");
 MODULE_AUTHOR("Hans Verkuil");
 MODULE_LICENSE("GPL v2");
-MODULE_DEVICE_TABLE(pci, skeleton_pci_tbl);
 
 /**
  * struct skeleton - All internal data for one instance of device
@@ -77,7 +77,8 @@ struct skeleton {
 
 	spinlock_t qlock;
 	struct list_head buf_list;
-	unsigned int sequence;
+	unsigned field;
+	unsigned sequence;
 };
 
 struct skel_buffer {
@@ -94,6 +95,7 @@ static const struct pci_device_id skeleton_pci_tbl[] = {
 	/* { PCI_DEVICE(PCI_VENDOR_ID_, PCI_DEVICE_ID_) }, */
 	{ 0, }
 };
+MODULE_DEVICE_TABLE(pci, skeleton_pci_tbl);
 
 /*
  * HDTV: this structure has the capabilities of the HDTV receiver.
@@ -124,7 +126,7 @@ static const struct v4l2_dv_timings_cap skel_timings_cap = {
  * Interrupt handler: typically interrupts happen after a new frame has been
  * captured. It is the job of the handler to remove the new frame from the
  * internal list and give it back to the vb2 framework, updating the sequence
- * counter and timestamp at the same time.
+ * counter, field and timestamp at the same time.
  */
 static irqreturn_t skeleton_irq(int irq, void *dev_id)
 {
@@ -139,8 +141,15 @@ static irqreturn_t skeleton_irq(int irq, void *dev_id)
 		spin_lock(&skel->qlock);
 		list_del(&new_buf->list);
 		spin_unlock(&skel->qlock);
-		new_buf->vb.v4l2_buf.sequence = skel->sequence++;
 		v4l2_get_timestamp(&new_buf->vb.v4l2_buf.timestamp);
+		new_buf->vb.v4l2_buf.sequence = skel->sequence++;
+		new_buf->vb.v4l2_buf.field = skel->field;
+		if (skel->format.field == V4L2_FIELD_ALTERNATE) {
+			if (skel->field == V4L2_FIELD_BOTTOM)
+				skel->field = V4L2_FIELD_TOP;
+			else if (skel->field == V4L2_FIELD_TOP)
+				skel->field = V4L2_FIELD_BOTTOM;
+		}
 		vb2_buffer_done(&new_buf->vb, VB2_BUF_STATE_DONE);
 	}
 #endif
@@ -154,29 +163,37 @@ static irqreturn_t skeleton_irq(int irq, void *dev_id)
  * minimum number: many DMA engines need a minimum of 2 buffers in the
  * queue and you need to have another available for userspace processing.
  */
-static int queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
+static int queue_setup(struct vb2_queue *vq,
 		       unsigned int *nbuffers, unsigned int *nplanes,
 		       unsigned int sizes[], void *alloc_ctxs[])
 {
 	struct skeleton *skel = vb2_get_drv_priv(vq);
 
+	skel->field = skel->format.field;
+	if (skel->field == V4L2_FIELD_ALTERNATE) {
+		/*
+		 * You cannot use read() with FIELD_ALTERNATE since the field
+		 * information (TOP/BOTTOM) cannot be passed back to the user.
+		 */
+		if (vb2_fileio_is_active(vq))
+			return -EINVAL;
+		skel->field = V4L2_FIELD_TOP;
+	}
+
 	if (vq->num_buffers + *nbuffers < 3)
 		*nbuffers = 3 - vq->num_buffers;
-
-	if (fmt && fmt->fmt.pix.sizeimage < skel->format.sizeimage)
-		return -EINVAL;
-	*nplanes = 1;
-	sizes[0] = fmt ? fmt->fmt.pix.sizeimage : skel->format.sizeimage;
 	alloc_ctxs[0] = skel->alloc_ctx;
+
+	if (*nplanes)
+		return sizes[0] < skel->format.sizeimage ? -EINVAL : 0;
+	*nplanes = 1;
+	sizes[0] = skel->format.sizeimage;
 	return 0;
 }
 
 /*
  * Prepare the buffer for queueing to the DMA engine: check and set the
- * payload size and fill in the field. Note: if the format's field is
- * V4L2_FIELD_ALTERNATE, then vb->v4l2_buf.field should be set in the
- * interrupt handler since that's usually where you know if the TOP or
- * BOTTOM field has been captured.
+ * payload size.
  */
 static int buffer_prepare(struct vb2_buffer *vb)
 {
@@ -190,7 +207,6 @@ static int buffer_prepare(struct vb2_buffer *vb)
 	}
 
 	vb2_set_plane_payload(vb, 0, size);
-	vb->v4l2_buf.field = skel->format.field;
 	return 0;
 }
 
@@ -254,7 +270,7 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
  * Stop the DMA engine. Any remaining buffers in the DMA queue are dequeued
  * and passed on to the vb2 framework marked as STATE_ERROR.
  */
-static int stop_streaming(struct vb2_queue *vq)
+static void stop_streaming(struct vb2_queue *vq)
 {
 	struct skeleton *skel = vb2_get_drv_priv(vq);
 
@@ -262,7 +278,6 @@ static int stop_streaming(struct vb2_queue *vq)
 
 	/* Release all active buffers */
 	return_all_buffers(skel, VB2_BUF_STATE_ERROR);
-	return 0;
 }
 
 /*
@@ -319,10 +334,12 @@ static void skeleton_fill_pix_format(struct skeleton *skel,
 		/* HDMI input */
 		pix->width = skel->timings.bt.width;
 		pix->height = skel->timings.bt.height;
-		if (skel->timings.bt.interlaced)
-			pix->field = V4L2_FIELD_INTERLACED;
-		else
+		if (skel->timings.bt.interlaced) {
+			pix->field = V4L2_FIELD_ALTERNATE;
+			pix->height /= 2;
+		} else {
 			pix->field = V4L2_FIELD_NONE;
+		}
 		pix->colorspace = V4L2_COLORSPACE_REC709;
 	}
 
@@ -390,9 +407,7 @@ static int skeleton_enum_fmt_vid_cap(struct file *file, void *priv,
 	if (f->index != 0)
 		return -EINVAL;
 
-	strlcpy(f->description, "4:2:2, packed, YUYV", sizeof(f->description));
 	f->pixelformat = V4L2_PIX_FMT_YUYV;
-	f->flags = 0;
 	return 0;
 }
 
@@ -493,7 +508,7 @@ static int skeleton_s_dv_timings(struct file *file, void *_fh,
 		return -EINVAL;
 
 	/* Return 0 if the new timings are the same as the current timings. */
-	if (v4l2_match_dv_timings(timings, &skel->timings, 0))
+	if (v4l2_match_dv_timings(timings, &skel->timings, 0, false))
 		return 0;
 
 	/*
@@ -867,11 +882,6 @@ static int skeleton_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	vdev->v4l2_dev = &skel->v4l2_dev;
 	/* Supported SDTV standards, if any */
 	vdev->tvnorms = SKEL_TVNORMS;
-	/* If this bit is set, then the v4l2 core will provide the support
-	 * for the VIDIOC_G/S_PRIORITY ioctls. This flag will eventually
-	 * go away once all drivers have been converted to use struct v4l2_fh.
-	 */
-	set_bit(V4L2_FL_USE_FH_PRIO, &vdev->flags);
 	video_set_drvdata(vdev, skel);
 
 	ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);

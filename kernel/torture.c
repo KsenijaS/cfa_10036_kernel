@@ -211,18 +211,16 @@ EXPORT_SYMBOL_GPL(torture_onoff_cleanup);
 /*
  * Print online/offline testing statistics.
  */
-char *torture_onoff_stats(char *page)
+void torture_onoff_stats(void)
 {
 #ifdef CONFIG_HOTPLUG_CPU
-	page += sprintf(page,
-		       "onoff: %ld/%ld:%ld/%ld %d,%d:%d,%d %lu:%lu (HZ=%d) ",
-		       n_online_successes, n_online_attempts,
-		       n_offline_successes, n_offline_attempts,
-		       min_online, max_online,
-		       min_offline, max_offline,
-		       sum_online, sum_offline, HZ);
+	pr_cont("onoff: %ld/%ld:%ld/%ld %d,%d:%d,%d %lu:%lu (HZ=%d) ",
+		n_online_successes, n_online_attempts,
+		n_offline_successes, n_offline_attempts,
+		min_online, max_online,
+		min_offline, max_offline,
+		sum_online, sum_offline, HZ);
 #endif /* #ifdef CONFIG_HOTPLUG_CPU */
-	return page;
 }
 EXPORT_SYMBOL_GPL(torture_onoff_stats);
 
@@ -335,13 +333,8 @@ static void torture_shuffle_tasks(void)
 	shuffle_idle_cpu = cpumask_next(shuffle_idle_cpu, shuffle_tmp_mask);
 	if (shuffle_idle_cpu >= nr_cpu_ids)
 		shuffle_idle_cpu = -1;
-	if (shuffle_idle_cpu != -1) {
+	else
 		cpumask_clear_cpu(shuffle_idle_cpu, shuffle_tmp_mask);
-		if (cpumask_empty(shuffle_tmp_mask)) {
-			put_online_cpus();
-			return;
-		}
-	}
 
 	mutex_lock(&shuffle_task_mutex);
 	list_for_each_entry(stp, &shuffle_task_list, st_l)
@@ -416,7 +409,7 @@ static void (*torture_shutdown_hook)(void);
  */
 void torture_shutdown_absorb(const char *title)
 {
-	while (ACCESS_ONCE(fullstop) == FULLSTOP_SHUTDOWN) {
+	while (READ_ONCE(fullstop) == FULLSTOP_SHUTDOWN) {
 		pr_notice("torture thread %s parking due to system shutdown\n",
 			  title);
 		schedule_timeout_uninterruptible(MAX_SCHEDULE_TIMEOUT);
@@ -487,9 +480,9 @@ static int torture_shutdown_notify(struct notifier_block *unused1,
 				   unsigned long unused2, void *unused3)
 {
 	mutex_lock(&fullstop_mutex);
-	if (ACCESS_ONCE(fullstop) == FULLSTOP_DONTSTOP) {
+	if (READ_ONCE(fullstop) == FULLSTOP_DONTSTOP) {
 		VERBOSE_TOROUT_STRING("Unscheduled system shutdown detected");
-		ACCESS_ONCE(fullstop) = FULLSTOP_SHUTDOWN;
+		WRITE_ONCE(fullstop, FULLSTOP_SHUTDOWN);
 	} else {
 		pr_warn("Concurrent rmmod and shutdown illegal!\n");
 	}
@@ -530,10 +523,15 @@ static int stutter;
  */
 void stutter_wait(const char *title)
 {
-	while (ACCESS_ONCE(stutter_pause_test) ||
-	       (torture_runnable && !ACCESS_ONCE(*torture_runnable))) {
+	cond_resched_rcu_qs();
+	while (READ_ONCE(stutter_pause_test) ||
+	       (torture_runnable && !READ_ONCE(*torture_runnable))) {
 		if (stutter_pause_test)
-			schedule_timeout_interruptible(1);
+			if (READ_ONCE(stutter_pause_test) == 1)
+				schedule_timeout_interruptible(1);
+			else
+				while (READ_ONCE(stutter_pause_test))
+					cond_resched();
 		else
 			schedule_timeout_interruptible(round_jiffies_relative(HZ));
 		torture_shutdown_absorb(title);
@@ -550,12 +548,16 @@ static int torture_stutter(void *arg)
 	VERBOSE_TOROUT_STRING("torture_stutter task started");
 	do {
 		if (!torture_must_stop()) {
-			schedule_timeout_interruptible(stutter);
-			ACCESS_ONCE(stutter_pause_test) = 1;
+			if (stutter > 1) {
+				schedule_timeout_interruptible(stutter - 1);
+				WRITE_ONCE(stutter_pause_test, 2);
+			}
+			schedule_timeout_interruptible(1);
+			WRITE_ONCE(stutter_pause_test, 1);
 		}
 		if (!torture_must_stop())
 			schedule_timeout_interruptible(stutter);
-		ACCESS_ONCE(stutter_pause_test) = 0;
+		WRITE_ONCE(stutter_pause_test, 0);
 		torture_shutdown_absorb("torture_stutter");
 	} while (!torture_must_stop());
 	torture_kthread_stopping("torture_stutter");
@@ -596,21 +598,27 @@ static void torture_stutter_cleanup(void)
  * The runnable parameter points to a flag that controls whether or not
  * the test is currently runnable.  If there is no such flag, pass in NULL.
  */
-void __init torture_init_begin(char *ttype, bool v, int *runnable)
+bool torture_init_begin(char *ttype, bool v, int *runnable)
 {
 	mutex_lock(&fullstop_mutex);
+	if (torture_type != NULL) {
+		pr_alert("torture_init_begin: refusing %s init: %s running",
+			 ttype, torture_type);
+		mutex_unlock(&fullstop_mutex);
+		return false;
+	}
 	torture_type = ttype;
 	verbose = v;
 	torture_runnable = runnable;
 	fullstop = FULLSTOP_DONTSTOP;
-
+	return true;
 }
 EXPORT_SYMBOL_GPL(torture_init_begin);
 
 /*
  * Tell the torture module that initialization is complete.
  */
-void __init torture_init_end(void)
+void torture_init_end(void)
 {
 	mutex_unlock(&fullstop_mutex);
 	register_reboot_notifier(&torture_shutdown_nb);
@@ -626,17 +634,22 @@ EXPORT_SYMBOL_GPL(torture_init_end);
  *
  * This must be called before the caller starts shutting down its own
  * kthreads.
+ *
+ * Both torture_cleanup_begin() and torture_cleanup_end() must be paired,
+ * in order to correctly perform the cleanup. They are separated because
+ * threads can still need to reference the torture_type type, thus nullify
+ * only after completing all other relevant calls.
  */
-bool torture_cleanup(void)
+bool torture_cleanup_begin(void)
 {
 	mutex_lock(&fullstop_mutex);
-	if (ACCESS_ONCE(fullstop) == FULLSTOP_SHUTDOWN) {
+	if (READ_ONCE(fullstop) == FULLSTOP_SHUTDOWN) {
 		pr_warn("Concurrent rmmod and shutdown illegal!\n");
 		mutex_unlock(&fullstop_mutex);
 		schedule_timeout_uninterruptible(10);
 		return true;
 	}
-	ACCESS_ONCE(fullstop) = FULLSTOP_RMMOD;
+	WRITE_ONCE(fullstop, FULLSTOP_RMMOD);
 	mutex_unlock(&fullstop_mutex);
 	torture_shutdown_cleanup();
 	torture_shuffle_cleanup();
@@ -644,7 +657,15 @@ bool torture_cleanup(void)
 	torture_onoff_cleanup();
 	return false;
 }
-EXPORT_SYMBOL_GPL(torture_cleanup);
+EXPORT_SYMBOL_GPL(torture_cleanup_begin);
+
+void torture_cleanup_end(void)
+{
+	mutex_lock(&fullstop_mutex);
+	torture_type = NULL;
+	mutex_unlock(&fullstop_mutex);
+}
+EXPORT_SYMBOL_GPL(torture_cleanup_end);
 
 /*
  * Is it time for the current torture test to stop?
@@ -661,7 +682,7 @@ EXPORT_SYMBOL_GPL(torture_must_stop);
  */
 bool torture_must_stop_irq(void)
 {
-	return ACCESS_ONCE(fullstop) != FULLSTOP_DONTSTOP;
+	return READ_ONCE(fullstop) != FULLSTOP_DONTSTOP;
 }
 EXPORT_SYMBOL_GPL(torture_must_stop_irq);
 
@@ -674,8 +695,10 @@ EXPORT_SYMBOL_GPL(torture_must_stop_irq);
  */
 void torture_kthread_stopping(char *title)
 {
-	if (verbose)
-		VERBOSE_TOROUT_STRING(title);
+	char buf[128];
+
+	snprintf(buf, sizeof(buf), "Stopping %s", title);
+	VERBOSE_TOROUT_STRING(buf);
 	while (!kthread_should_stop()) {
 		torture_shutdown_absorb(title);
 		schedule_timeout_uninterruptible(1);
@@ -694,7 +717,7 @@ int _torture_create_kthread(int (*fn)(void *arg), void *arg, char *s, char *m,
 	int ret = 0;
 
 	VERBOSE_TOROUT_STRING(m);
-	*tp = kthread_run(fn, arg, s);
+	*tp = kthread_run(fn, arg, "%s", s);
 	if (IS_ERR(*tp)) {
 		ret = PTR_ERR(*tp);
 		VERBOSE_TOROUT_ERRSTRING(f);

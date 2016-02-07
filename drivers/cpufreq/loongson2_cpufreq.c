@@ -3,7 +3,7 @@
  *
  * The 2E revision of loongson processor not support this feature.
  *
- * Copyright (C) 2006 - 2008 Lemote Inc. & Insititute of Computing Technology
+ * Copyright (C) 2006 - 2008 Lemote Inc. & Institute of Computing Technology
  * Author: Yanhua, yanh@lemote.com
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -20,7 +20,7 @@
 #include <asm/clock.h>
 #include <asm/idle.h>
 
-#include <asm/mach-loongson/loongson.h>
+#include <asm/mach-loongson64/loongson.h>
 
 static uint nowait;
 
@@ -62,7 +62,7 @@ static int loongson2_cpufreq_target(struct cpufreq_policy *policy,
 	set_cpus_allowed_ptr(current, &cpus_allowed);
 
 	/* setting the cpu frequency */
-	clk_set_rate(policy->clk, freq);
+	clk_set_rate(policy->clk, freq * 1000);
 
 	return 0;
 }
@@ -92,7 +92,7 @@ static int loongson2_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	     i++)
 		loongson2_clockmod_table[i].frequency = (rate * i) / 8;
 
-	ret = clk_set_rate(cpuclk, rate);
+	ret = clk_set_rate(cpuclk, rate * 1000);
 	if (ret) {
 		clk_put(cpuclk);
 		return ret;
@@ -130,7 +130,6 @@ MODULE_DEVICE_TABLE(platform, platform_device_ids);
 static struct platform_driver platform_driver = {
 	.driver = {
 		.name = "loongson2_cpufreq",
-		.owner = THIS_MODULE,
 	},
 	.id_table = platform_device_ids,
 };
@@ -148,9 +147,9 @@ static void loongson2_cpu_wait(void)
 	u32 cpu_freq;
 
 	spin_lock_irqsave(&loongson2_wait_lock, flags);
-	cpu_freq = LOONGSON_CHIPCFG0;
-	LOONGSON_CHIPCFG0 &= ~0x7;	/* Put CPU into wait mode */
-	LOONGSON_CHIPCFG0 = cpu_freq;	/* Restore CPU state */
+	cpu_freq = LOONGSON_CHIPCFG(0);
+	LOONGSON_CHIPCFG(0) &= ~0x7;	/* Put CPU into wait mode */
+	LOONGSON_CHIPCFG(0) = cpu_freq;	/* Restore CPU state */
 	spin_unlock_irqrestore(&loongson2_wait_lock, flags);
 	local_irq_enable();
 }

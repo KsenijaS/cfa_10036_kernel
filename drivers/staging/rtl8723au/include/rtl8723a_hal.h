@@ -20,6 +20,7 @@
 #include "Hal8723APhyReg.h"
 #include "Hal8723APhyCfg.h"
 #include "rtl8723a_rf.h"
+#include "rtl8723a_bt_intf.h"
 #ifdef CONFIG_8723AU_BT_COEXIST
 #include "rtl8723a_bt-coexist.h"
 #endif
@@ -29,24 +30,15 @@
 #include "rtl8723a_cmd.h"
 #include "rtl8723a_sreset.h"
 #include "rtw_efuse.h"
+#include "rtw_eeprom.h"
 
 #include "odm_precomp.h"
+#include "odm.h"
 
 
 /* 2TODO: We should define 8192S firmware related macro settings here!! */
 #define RTL819X_DEFAULT_RF_TYPE			RF_1T2R
 #define RTL819X_TOTAL_RF_PATH				2
-
-/* TODO:  The following need to check!! */
-#define RTL8723_FW_UMC_IMG				"rtl8192CU\\rtl8723fw.bin"
-#define RTL8723_FW_UMC_B_IMG			"rtl8192CU\\rtl8723fw_B.bin"
-#define RTL8723_PHY_REG					"rtl8723S\\PHY_REG_1T.txt"
-#define RTL8723_PHY_RADIO_A				"rtl8723S\\radio_a_1T.txt"
-#define RTL8723_PHY_RADIO_B				"rtl8723S\\radio_b_1T.txt"
-#define RTL8723_AGC_TAB					"rtl8723S\\AGC_TAB_1T.txt"
-#define RTL8723_PHY_MACREG				"rtl8723S\\MAC_REG.txt"
-#define RTL8723_PHY_REG_PG				"rtl8723S\\PHY_REG_PG.txt"
-#define RTL8723_PHY_REG_MP				"rtl8723S\\PHY_REG_MP.txt"
 
 /*  */
 /*		RTL8723S From header */
@@ -88,12 +80,15 @@ struct rt_8723a_firmware_hdr {
 	/*  8-byte alinment required */
 
 	/*  LONG WORD 0 ---- */
-	u16		Signature;	/*  92C0: test chip; 92C, 88C0: test chip; 88C1: MP A-cut; 92C1: MP A-cut */
+	__le16		Signature;  /*
+				     * 92C0: test chip; 92C, 88C0: test chip;
+				     * 88C1: MP A-cut; 92C1: MP A-cut
+				     */
 	u8		Category;	/*  AP/NIC and USB/PCI */
 	u8		Function;	/*  Reserved for different FW function indcation, for further use when driver needs to download different FW in different conditions */
-	u16		Version;		/*  FW Version */
+	__le16		Version;		/*  FW Version */
 	u8		Subversion;	/*  FW Subversion, default 0x00 */
-	u16		Rsvd1;
+	u8		Rsvd1;
 
 
 	/*  LONG WORD 1 ---- */
@@ -101,16 +96,16 @@ struct rt_8723a_firmware_hdr {
 	u8		Date;	/*  Release time Date field */
 	u8		Hour;	/*  Release time Hour field */
 	u8		Minute;	/*  Release time Minute field */
-	u16		RamCodeSize;	/*  The size of RAM code */
-	u16		Rsvd2;
+	__le16		RamCodeSize;	/*  The size of RAM code */
+	__le16		Rsvd2;
 
 	/*  LONG WORD 2 ---- */
-	u32		SvnIdx;	/*  The SVN entry index */
-	u32		Rsvd3;
+	__le32		SvnIdx;	/*  The SVN entry index */
+	__le32		Rsvd3;
 
 	/*  LONG WORD 3 ---- */
-	u32		Rsvd4;
-	u32		Rsvd5;
+	__le32		Rsvd4;
+	__le32		Rsvd5;
 };
 
 #define DRIVER_EARLY_INT_TIME		0x05
@@ -201,7 +196,7 @@ enum ChannelPlan
 /*  |         |            Reserved(14bytes)	      | */
 /*  */
 
-/*  PG data exclude header, dummy 6 bytes frome CP test and reserved 1byte. */
+/*  PG data exclude header, dummy 6 bytes from CP test and reserved 1byte. */
 #define EFUSE_OOB_PROTECT_BYTES			15
 
 #define EFUSE_REAL_CONTENT_LEN_8723A	512
@@ -278,7 +273,6 @@ struct hal_data_8723a {
 	u16	BasicRateSet;
 
 	/* rf_ctrl */
-	u8	rf_chip;
 	u8	rf_type;
 	u8	NumTotalRFPath;
 
@@ -288,10 +282,6 @@ struct hal_data_8723a {
 	/*  EEPROM setting. */
 	/*  */
 	u8	EEPROMVersion;
-	u16	EEPROMVID;
-	u16	EEPROMPID;
-	u16	EEPROMSVID;
-	u16	EEPROMSDID;
 	u8	EEPROMCustomerID;
 	u8	EEPROMSubCustomerID;
 	u8	EEPROMRegulatory;
@@ -323,7 +313,6 @@ struct hal_data_8723a {
 	u8	framesync;
 	u32	framesyncC34;
 	u8	framesyncMonitor;
-	u8	DefaultInitialGain[4];
 	u8	pwrGroupCnt;
 	u32	MCSTxPowerLevelOriginalOffset[7][16];
 	u32	CCKTxPowerLevelOriginalOffset;
@@ -361,10 +350,8 @@ struct hal_data_8723a {
 	/* for host message to fw */
 	u8	LastHMEBoxNum;
 
-	u8	fw_ractrl;
 	u8	RegTxPause;
 	/*  Beacon function related global variable. */
-	u32	RegBcnCtrlVal;
 	u8	RegFwHwTxQCtrl;
 	u8	RegReg542;
 
@@ -386,18 +373,8 @@ struct hal_data_8723a {
 	/*  2010/08/09 MH Add CU power down mode. */
 	u8	pwrdown;
 
-	/*  Add for dual MAC  0--Mac0 1--Mac1 */
-	u32	interfaceIndex;
-
 	u8	OutEpQueueSel;
 	u8	OutEpNumber;
-
-	/*  2010/12/10 MH Add for USB aggreation mode dynamic shceme. */
-	bool		UsbRxHighSpeedMode;
-
-	/*  2010/11/22 MH Add for slim combo debug mode selective. */
-	/*  This is used for fix the drawback of CU TSMC-A/UMC-A cut. HW auto suspend ability. Close BT clock. */
-	bool		SlimComboDbg;
 
 	/*  */
 	/*  Add For EEPROM Efuse switch and  Efuse Shadow map Setting */
@@ -422,29 +399,9 @@ struct hal_data_8723a {
 	 *  2011/02/23 MH Add for 8723 mylti function definition. The define should be moved to an */
 	/*  independent file in the future. */
 
-	bool				bMACFuncEnable;
-
-#ifdef CONFIG_8723AU_P2P
-	struct P2P_PS_Offload_t	p2p_ps_offload;
-#endif
-
-
-	/*  */
-	/*  For USB Interface HAL related */
-	/*  */
-	u32	UsbBulkOutSize;
-
 	/*  Interrupt related register information. */
 	u32	IntArray[2];
 	u32	IntrMask[2];
-
-	/*  */
-	/*  For SDIO Interface HAL related */
-	/*  */
-
-	/*  Auto FSM to Turn On, include clock, isolation, power control for MAC only */
-	u8			bMacPwrCtrlOn;
-
 };
 
 #define GET_HAL_DATA(__pAdapter)	((struct hal_data_8723a *)((__pAdapter)->HalData))
@@ -551,25 +508,31 @@ void Hal_EfuseParseCustomerID(struct rtw_adapter *padapter, u8 *hwinfo, bool Aut
 void Hal_EfuseParseAntennaDiversity(struct rtw_adapter *padapter, u8 *hwinfo, bool AutoLoadFail);
 void Hal_EfuseParseRateIndicationOption(struct rtw_adapter *padapter, u8 *hwinfo, bool AutoLoadFail);
 void Hal_EfuseParseXtal_8723A(struct rtw_adapter *pAdapter, u8 *hwinfo, u8 AutoLoadFail);
-void Hal_EfuseParseThermalMeter_8723A(struct rtw_adapter *padapter, u8 *hwinfo, u8 AutoLoadFail);
-
-void Hal_InitChannelPlan23a(struct rtw_adapter *padapter);
-
-void rtl8723a_set_hal_ops(struct hal_ops *pHalFunc);
-void SetHwReg8723A(struct rtw_adapter *padapter, u8 variable, u8 *val);
-void GetHwReg8723A(struct rtw_adapter *padapter, u8 variable, u8 *val);
-#ifdef CONFIG_8723AU_BT_COEXIST
-void rtl8723a_SingleDualAntennaDetection(struct rtw_adapter *padapter);
-#endif
+void Hal_EfuseParseThermalMeter_8723A(struct rtw_adapter *padapter, u8 *hwinfo, bool AutoLoadFail);
 
 /*  register */
 void SetBcnCtrlReg23a(struct rtw_adapter *padapter, u8 SetBits, u8 ClearBits);
 void rtl8723a_InitBeaconParameters(struct rtw_adapter *padapter);
 
-void rtl8723a_clone_haldata(struct rtw_adapter *dst_adapter, struct rtw_adapter *src_adapter);
 void rtl8723a_start_thread(struct rtw_adapter *padapter);
 void rtl8723a_stop_thread(struct rtw_adapter *padapter);
 
-s32 c2h_id_filter_ccx_8723a(u8 id);
+bool c2h_id_filter_ccx_8723a(u8 id);
+int c2h_handler_8723a(struct rtw_adapter *padapter, struct c2h_evt_hdr *c2h_evt);
+
+void rtl8723a_read_adapter_info(struct rtw_adapter *Adapter);
+void rtl8723a_read_chip_version(struct rtw_adapter *padapter);
+void rtl8723a_notch_filter(struct rtw_adapter *adapter, bool enable);
+void rtl8723a_SetBeaconRelatedRegisters(struct rtw_adapter *padapter);
+void rtl8723a_SetHalODMVar(struct rtw_adapter *Adapter,
+			   enum hal_odm_variable eVariable,
+			   void *pValue1, bool bSet);
+void
+rtl8723a_readefuse(struct rtw_adapter *padapter,
+		   u8 efuseType, u16 _offset, u16 _size_byte, u8 *pbuf);
+u16 rtl8723a_EfuseGetCurrentSize_WiFi(struct rtw_adapter *padapter);
+u16 rtl8723a_EfuseGetCurrentSize_BT(struct rtw_adapter *padapter);
+void rtl8723a_update_ramask(struct rtw_adapter *padapter,
+			    u32 mac_id, u8 rssi_level);
 
 #endif

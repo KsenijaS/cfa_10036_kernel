@@ -1,5 +1,5 @@
 /*
- * IEEE 802.15.4 inteface for userspace
+ * IEEE 802.15.4 interface for userspace
  *
  * Copyright 2007, 2008 Siemens AG
  *
@@ -11,10 +11,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  * Written by:
  * Sergey Lapin <slapin@ossfans.org>
@@ -57,6 +53,14 @@ struct sockaddr_ieee802154 {
 /* get/setsockopt */
 #define SOL_IEEE802154	0
 
-#define WPAN_WANTACK	0
+#define WPAN_WANTACK		0
+#define WPAN_SECURITY		1
+#define WPAN_SECURITY_LEVEL	2
+
+#define WPAN_SECURITY_DEFAULT	0
+#define WPAN_SECURITY_OFF	1
+#define WPAN_SECURITY_ON	2
+
+#define WPAN_SECURITY_LEVEL_DEFAULT	(-1)
 
 #endif

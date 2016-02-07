@@ -187,7 +187,7 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	struct resource *r;
 	struct mii_bus *bus;
 	struct orion_mdio_dev *dev;
-	int i, ret;
+	int ret;
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r) {
@@ -195,11 +195,10 @@ static int orion_mdio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	bus = mdiobus_alloc_size(sizeof(struct orion_mdio_dev));
-	if (!bus) {
-		dev_err(&pdev->dev, "Cannot allocate MDIO bus\n");
+	bus = devm_mdiobus_alloc_size(&pdev->dev,
+				      sizeof(struct orion_mdio_dev));
+	if (!bus)
 		return -ENOMEM;
-	}
 
 	bus->name = "orion_mdio_bus";
 	bus->read = orion_mdio_read;
@@ -207,15 +206,6 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-mii",
 		 dev_name(&pdev->dev));
 	bus->parent = &pdev->dev;
-
-	bus->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
-	if (!bus->irq) {
-		mdiobus_free(bus);
-		return -ENOMEM;
-	}
-
-	for (i = 0; i < PHY_MAX_ADDR; i++)
-		bus->irq[i] = PHY_POLL;
 
 	dev = bus->priv;
 	dev->regs = devm_ioremap(&pdev->dev, r->start, resource_size(r));
@@ -264,8 +254,6 @@ static int orion_mdio_probe(struct platform_device *pdev)
 out_mdio:
 	if (!IS_ERR(dev->clk))
 		clk_disable_unprepare(dev->clk);
-	kfree(bus->irq);
-	mdiobus_free(bus);
 	return ret;
 }
 
@@ -276,8 +264,6 @@ static int orion_mdio_remove(struct platform_device *pdev)
 
 	writel(0, dev->regs + MVMDIO_ERR_INT_MASK);
 	mdiobus_unregister(bus);
-	kfree(bus->irq);
-	mdiobus_free(bus);
 	if (!IS_ERR(dev->clk))
 		clk_disable_unprepare(dev->clk);
 
